@@ -306,10 +306,12 @@ body.hurt #game { animation: hurt .35s; }
   background: rgba(40, 30, 8, .9); border: 1px solid var(--warn); color: var(--warn); font-size: 13px; font-weight: 800;
 }
 #pi.hidden { display: none; }
-#pi.plan { justify-content: space-between; background: rgba(8, 36, 28, .92); border-color: var(--good); color: var(--good); }
-#pi button {
-  pointer-events: auto; border: 0; border-radius: 8px; padding: 7px 10px;
-  background: var(--good); color: #04101f; font: inherit; font-weight: 900;
+.pi-go {
+  flex: 1; height: 36px; border: 0; border-radius: 10px; padding: 0 10px;
+  background: var(--good); color: #04101f; font: inherit; font-size: 14px; font-weight: 900; white-space: nowrap;
+  box-shadow: 0 0 0 0 rgba(52, 211, 153, .6); animation: pigo 1.6s ease-out infinite;
 }
+@keyframes pigo { 70% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); } 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); } }
+.hidden.pi-go, #hud .sprint.hidden { display: none; }
 #inbox.pi-hunt .card { opacity: .2; pointer-events: none; }
 .card.type-story { background: color-mix(in srgb, var(--warn) 14%, var(--panel2)); }

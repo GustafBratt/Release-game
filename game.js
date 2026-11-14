@@ -1029,13 +1029,16 @@ function startPI() {
 
 function piBar() {
   const p = G.pi;
-  piEl.classList.toggle('hidden', !p);
+  const plan = !!p && p.phase === 'plan';
+  // The level has its bar over the canvas; while planning, the start button sits in the top bar instead,
+  // so nothing covers the cards on the radar.
+  piEl.classList.toggle('hidden', !p || plan);
   document.body.classList.toggle('pi', !!p);
+  $('#hud .sprint').classList.toggle('hidden', plan);
+  $('#pi-go').classList.toggle('hidden', !plan);
   if (!p) return;
-  piEl.classList.toggle('plan', p.phase === 'plan');
-  piEl.innerHTML = p.phase === 'hunt'
-    ? `<span>🍬 <b>${p.caught}</b>/${PI_CANDIES}</span><span class="pi-hint">Tryck för att hoppa, två gånger för dubbelhopp</span>`
-    : `<span>Planera i lugn och ro</span><button data-pigo>▶ Starta sprint ${G.sprint}</button>`;
+  $('#pi-go').textContent = `▶ Starta sprint ${G.sprint}`;
+  if (!plan) piEl.innerHTML = `<span>🍬 <b>${p.caught}</b>/${PI_CANDIES}</span><span class="pi-hint">Tryck för att hoppa, två gånger för dubbelhopp</span>`;
 }
 
 // ---- The platform level: the PI program board, with desks to run on and sticky notes to jump onto ----
@@ -1261,7 +1264,7 @@ function endHunt() {
   inboxEl.classList.remove('pi-hunt');
   piCanvas.classList.add('hidden');
   for (let i = 0; i < p.caught; i++) placeFree(spawnCard('story', { quiet: true }));
-  if (p.caught) { toast(`✨ ${p.caught} ${p.caught === 1 ? 'ny story' : 'nya stories'} att planera`, 'good'); sfx.resolved(); }
+  if (p.caught) { toast(`✨ ${p.caught} ${p.caught === 1 ? 'ny story' : 'nya stories'}. Planera i lugn och ro.`, 'good'); sfx.resolved(); }
   else toast('Inga godisar, inga stories. Planera det du har.', '');
   sfx.sprint();
   piBar();
@@ -1270,8 +1273,7 @@ function endHunt() {
 function placeFree(c) {
   const span = L.inboxH - CARD_H - TOP - 6;
   const gap = (CARD_H + 10) / span; // one card's height plus margin, in progress units
-  const from = 34 / span;          // below the PI bar
-  for (let p = from; p <= 0.75; p += gap / 2) {
+  for (let p = 0; p <= 0.75; p += gap / 2) {
     for (const col of [0, 1, 2]) {
       const clash = [...G.cards.values()].some((o) => o !== c && o.where === 'inbox' && o.col === col && Math.abs(o.progress - p) < gap);
       if (!clash) { c.col = col; c.progress = p; positionCard(c); return; }
