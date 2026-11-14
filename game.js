@@ -522,7 +522,8 @@ function blockingMigrations(r) {
 // Changes planned into the same release are merged together and can't be separated.
 // (An API change alone in a release can still move, since its cards move as one.)
 function isLocked(c) {
-  if (c.where !== 'release') return false;
+  // PI planning is for replanning: while planning, anything in an open release can be moved.
+  if (c.where !== 'release' || (G.pi && G.pi.phase === 'plan')) return false;
   const r = releaseById(c.releaseId);
   const mine = new Set([c.id, ...groupOf(c).map((m) => m.id)]);
   return !!r && r.cards.some((id) => !mine.has(id));
@@ -1263,6 +1264,10 @@ function endHunt() {
   p.phase = 'plan';
   inboxEl.classList.remove('pi-hunt');
   piCanvas.classList.add('hidden');
+  // Everything on its way (a held-back migration, the rest of an API change) lands now, so the plan can include it.
+  const firstNew = G.nextId;
+  for (const s of G.scheduled.splice(0)) s.fn();
+  for (const c of G.cards.values()) if (c.id >= firstNew && c.where === 'inbox') placeFree(c);
   for (let i = 0; i < p.caught; i++) placeFree(spawnCard('story', { quiet: true }));
   if (p.caught) { toast(`✨ ${p.caught} ${p.caught === 1 ? 'ny story' : 'nya stories'}. Planera i lugn och ro.`, 'good'); sfx.resolved(); }
   else toast('Inga godisar, inga stories. Planera det du har.', '');
