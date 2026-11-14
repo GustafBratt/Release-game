@@ -38,12 +38,14 @@ const SEC_DUE = 30;          // a security fix must be in prod this many seconds
 const DUE_BONUS = 150;       // customer deadline kept
 const FORCE_SLOTS = 8;       // a release this overfull gets deployed by someone else
 const CARD_H = 62;
-// PI planning: after every third sprint the game stops for a candy hunt, then calm planning.
+// PI planning: after every third sprint the game stops for a little platform level, then calm planning.
 const PI_EVERY = 3;
-const PI_CANDIES = 8;        // candies per hunt; each one caught becomes a feature
-const PI_SPAWN = 0.75;       // seconds between candies
-const PI_LIFE = 1.7;         // seconds a candy stays on the radar
+const PI_CANDIES = 8;        // candies in the level; each one collected becomes a feature
+const PI_SPEED = 165;        // the avatar runs by itself, px/s
+const PI_GRAV = 1700;        // px/s²
+const PI_JUMP = 560;         // jump speed, px/s (about 90 px high; a double jump about doubles it)
 const CANDY = ['🍬', '🍭', '🍫', '🍩', '🧁', '🍪'];
+const NOTE_COLORS = ['#fde68a', '#f9a8d4', '#93c5fd', '#86efac'];
 const TOP = 22;              // space for the inbox label
 
 // ---------- Helpers ----------
@@ -292,6 +294,7 @@ function newGame() {
     spawnIn: 0.8, conflictIn: 8, sprint: 1,
     shipped: 0, broken: 0, changes: 0, selected: null, seenTips: new Set(),
     dbProd: 40, // schema version in prod: the highest migration shipped (they ship in order)
+    dbShown: false, // the top bar shows dbProd from the first migration shipped
     leadSum: 0, leadCount: 0, // lead time from radar to prod, over every change shipped
     pi: null, // PI planning in progress: { phase: 'hunt' | 'plan', spawned, caught, next, candies }
   };
@@ -729,6 +732,7 @@ function finishDeploy(r) {
     const dbs = cards.filter((c) => c.type === 'db').map((c) => c.dbv);
     if (dbs.length) {
       G.dbProd = Math.max(G.dbProd, ...dbs);
+      G.dbShown = true;
       const el = $('#dbprod');
       el.classList.remove('bump');
       void el.offsetWidth;
@@ -918,7 +922,7 @@ function render() {
   $('#score').textContent = G.score;
   $('#sprint').textContent = G.pi ? 'PI planning' : `Sprint ${G.sprint}`;
   const dbEl = $('#dbprod');
-  dbEl.classList.toggle('hidden', !unlocked('db'));
+  dbEl.classList.toggle('hidden', !G.dbShown);
   const dbText = `🗄️ V${G.dbProd} i prod`;
   if (dbEl.textContent !== dbText) dbEl.textContent = dbText;
 }
@@ -1001,15 +1005,24 @@ function update(dt) {
 // so the planning starts with lanes to fill.
 
 const piEl = $('#pi');
+const piCanvas = $('#pi-canvas');
+const pctx = piCanvas.getContext('2d');
 
 function startPI() {
   cancelDrag();
   select(null);
-  G.pi = { phase: 'hunt', spawned: 0, caught: 0, next: 0.8, candies: [] };
+  measure();
+  const H = L.inboxH;
+  G.pi = {
+    phase: 'hunt', caught: 0, time: 0, H, level: buildLevel(H),
+    av: { x: 40, y: H - 34, vy: 0, onGround: true, jumps: 0, hold: false, squash: 0, blink: 0 },
+  };
   inboxEl.classList.add('pi-hunt');
+  piCanvas.classList.remove('hidden');
   piBar();
   render();
-  banner('PI planning', 'Fånga godisarna!');
+  piDraw();
+  banner('PI planning', 'Samla godisarna!');
   sfx.sprint();
   tip('pi');
 }
@@ -1021,8 +1034,212 @@ function piBar() {
   if (!p) return;
   piEl.classList.toggle('plan', p.phase === 'plan');
   piEl.innerHTML = p.phase === 'hunt'
-    ? `🍬 Fånga godis! <b>${p.caught}</b> fångade`
+    ? `<span>🍬 <b>${p.caught}</b>/${PI_CANDIES}</span><span class="pi-hint">Tryck för att hoppa, två gånger för dubbelhopp</span>`
     : `<span>Planera i lugn och ro</span><button data-pigo>▶ Starta sprint ${G.sprint}</button>`;
+}
+
+// ---- The platform level: the PI program board, with desks to run on and sticky notes to jump onto ----
+
+// Platforms are one-way: you land on them from above. A candy sits on each segment, some easy, some only
+// reachable from a sticky note or with a double jump.
+function buildLevel(H) {
+  const ground = H - 34;
+  const hi = (n) => Math.max(64, ground - n); // keep things below the PI bar on short screens
+  const plats = [{ x: -300, w: 620, y: ground, kind: 'floor' }];
+  const candies = [];
+  let x = 320;
+  for (let i = 0; i < PI_CANDIES; i++) {
+    const kind = i === 0 ? 'air' : pick(['gap', 'note', 'high', 'air']);
+    const emoji = pick(CANDY);
+    if (kind === 'gap') {
+      // A candy in the arc over a gap.
+      const gap = rand(60, 90);
+      candies.push({ x: x + gap / 2, y: hi(rand(80, 100)), emoji });
+      x += gap;
+      const w = rand(170, 250);
+      plats.push({ x, w, y: ground, kind: 'floor' });
+      x += w;
+    } else if (kind === 'note' || kind === 'high') {
+      // A sticky note above the desk: a low one you can jump onto, or a high one that needs a double jump.
+      const w = rand(280, 340);
+      plats.push({ x, w, y: ground, kind: 'floor' });
+      const nw = rand(80, 105);
+      const ny = hi(kind === 'note' ? rand(70, 85) : rand(130, 150));
+      const nx = x + rand(70, w - nw - 50);
+      plats.push({ x: nx, w: nw, y: ny, kind: 'note', color: pick(NOTE_COLORS), tilt: rand(-0.05, 0.05) });
+      candies.push({ x: nx + nw / 2, y: ny - 26, emoji });
+      x += w;
+    } else {
+      // A candy floating above the desk: one jump.
+      const w = rand(220, 290);
+      plats.push({ x, w, y: ground, kind: 'floor' });
+      candies.push({ x: x + w / 2, y: hi(rand(50, 80)), emoji });
+      x += w;
+    }
+    if (kind !== 'gap' && Math.random() < 0.55) x += rand(50, 80); // a gap to jump
+  }
+  plats.push({ x, w: 600, y: ground, kind: 'floor' });
+  return { plats, candies, end: x + 160, ground };
+}
+
+function piPress(down) {
+  const a = G.pi.av;
+  a.hold = down;
+  if (!down || a.blink > 0) return;
+  if (a.onGround || a.jumps < 2) {
+    a.vy = -PI_JUMP * (a.onGround ? 1 : 0.92);
+    a.jumps = a.onGround ? 1 : a.jumps + 1;
+    a.onGround = false;
+    wood(a.jumps > 1 ? 2600 : 2000, 0.05);
+  }
+}
+
+function piPhysics(dt) {
+  const p = G.pi, a = p.av, lv = p.level;
+  p.time += dt;
+  a.squash = Math.max(0, a.squash - dt);
+  if (a.blink > 0) a.blink -= dt;
+  a.x += PI_SPEED * dt;
+  const prevY = a.y;
+  // Let go early and the jump ends lower.
+  a.vy += PI_GRAV * dt * (a.vy < 0 && !a.hold ? 2.4 : 1);
+  a.y += a.vy * dt;
+  const was = a.onGround;
+  a.onGround = false;
+  if (a.vy >= 0) {
+    for (const pl of lv.plats) {
+      if (a.x + 7 > pl.x && a.x - 7 < pl.x + pl.w && prevY <= pl.y + 1 && a.y >= pl.y) {
+        a.y = pl.y; a.vy = 0; a.onGround = true; a.jumps = 0;
+        if (!was) { a.squash = 0.12; wood(900, 0.03); }
+        break;
+      }
+    }
+  }
+  for (const k of lv.candies) {
+    if (!k.got && Math.abs(k.x - a.x) < 22 && Math.abs(k.y - (a.y - 18)) < 28) {
+      k.got = true;
+      k.pop = 0.35;
+      p.caught++;
+      bell(PENTA[(p.caught - 1) % PENTA.length] * 2, 0.5, 0.05);
+      piBar();
+    }
+    if (k.pop > 0) k.pop -= dt;
+  }
+  // Fell into a gap: back on the next desk, a little later. The candies you skipped are gone.
+  if (a.y > p.H + 40) {
+    const pl = lv.plats.find((q) => q.kind === 'floor' && q.x + q.w > a.x + 30);
+    a.x = Math.max(pl.x + 20, a.x);
+    a.y = pl.y; a.vy = 0; a.onGround = true; a.jumps = 0; a.blink = 0.9;
+    sfx.slip();
+  }
+  if (a.x >= lv.end) endHunt();
+}
+
+function piDraw() {
+  const p = G.pi, lv = p.level, a = p.av;
+  const W = L.inboxW, H = p.H, dpr = window.devicePixelRatio || 1;
+  if (piCanvas.width !== Math.round(W * dpr) || piCanvas.height !== Math.round(H * dpr)) {
+    piCanvas.width = Math.round(W * dpr);
+    piCanvas.height = Math.round(H * dpr);
+  }
+  const g = pctx;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const sky = g.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#0d1530');
+  sky.addColorStop(1, '#1b2850');
+  g.fillStyle = sky;
+  g.fillRect(0, 0, W, H);
+  const cam = a.x - W * 0.28;
+  // The program board in the background: faint columns, scrolling slower.
+  g.strokeStyle = 'rgba(148, 163, 184, .08)';
+  g.lineWidth = 1;
+  for (let i = Math.floor(cam * 0.4 / 90); i < (cam * 0.4 + W) / 90 + 1; i++) {
+    const x = i * 90 - cam * 0.4;
+    g.beginPath(); g.moveTo(x, 40); g.lineTo(x, H); g.stroke();
+  }
+  for (const pl of lv.plats) {
+    const x = pl.x - cam;
+    if (x > W || x + pl.w < 0) continue;
+    if (pl.kind === 'floor') {
+      g.fillStyle = '#26345c';
+      g.fillRect(x, pl.y, pl.w, H - pl.y);
+      g.fillStyle = '#60a5fa';
+      g.fillRect(x, pl.y, pl.w, 4);
+    } else {
+      g.save();
+      g.translate(x + pl.w / 2, pl.y + 9);
+      g.rotate(pl.tilt);
+      g.fillStyle = 'rgba(0, 0, 0, .35)';
+      g.fillRect(-pl.w / 2 + 3, -6, pl.w, 18);
+      g.fillStyle = pl.color;
+      g.fillRect(-pl.w / 2, -9, pl.w, 18);
+      g.fillStyle = 'rgba(0, 0, 0, .12)';
+      g.fillRect(-pl.w / 2, -9, pl.w, 4);
+      g.restore();
+    }
+  }
+  // The finish: a flag with the next sprint on it.
+  const fx = lv.end - cam;
+  if (fx < W + 40) {
+    g.fillStyle = '#cbd5e1';
+    g.fillRect(fx, lv.ground - 110, 3, 110);
+    g.fillStyle = '#34d399';
+    g.beginPath(); g.moveTo(fx + 3, lv.ground - 110); g.lineTo(fx + 46, lv.ground - 98); g.lineTo(fx + 3, lv.ground - 86); g.fill();
+  }
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  for (const k of lv.candies) {
+    const x = k.x - cam;
+    if (x < -30 || x > W + 30) continue;
+    if (k.got) {
+      if (k.pop > 0) {
+        g.globalAlpha = k.pop / 0.35;
+        g.font = 'bold 14px system-ui, sans-serif';
+        g.fillStyle = '#fbbf24';
+        g.fillText('✨', x, k.y - 30 * (1 - k.pop / 0.35));
+        g.globalAlpha = 1;
+      }
+      continue;
+    }
+    g.font = '24px system-ui, sans-serif';
+    g.fillText(k.emoji, x, k.y + Math.sin(p.time * 4 + k.x) * 3);
+  }
+  if (!(a.blink > 0 && Math.floor(a.blink * 10) % 2)) drawAvatar(g, a.x - cam, a.y, a, p.time);
+}
+
+// A round little developer in a hoodie and headphones. No gender cues on purpose.
+function drawAvatar(g, x, y, a, t) {
+  const sq = a.squash > 0 ? 1 - a.squash * 1.6 : 1;
+  g.save();
+  g.translate(x, y);
+  g.scale(2 - sq, sq);
+  // Legs: running on the ground, tucked in the air.
+  g.fillStyle = '#1e293b';
+  if (a.onGround) {
+    const s = Math.sin(t * 22) * 4;
+    g.fillRect(-6 + s, -7, 5, 7);
+    g.fillRect(1 - s, -7, 5, 7);
+  } else {
+    g.fillRect(-6, -9, 5, 5);
+    g.fillRect(2, -8, 5, 5);
+  }
+  // Hoodie body.
+  g.fillStyle = '#7c6cf0';
+  g.beginPath(); g.roundRect(-10, -24, 20, 18, 7); g.fill();
+  // Head: the hood with a round face.
+  g.beginPath(); g.arc(0, -31, 11, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#f2c9a0';
+  g.beginPath(); g.arc(2, -30, 7.5, 0, Math.PI * 2); g.fill();
+  // Eyes, looking ahead.
+  g.fillStyle = '#0f172a';
+  g.beginPath(); g.arc(1.5, -31, 1.4, 0, Math.PI * 2); g.arc(6, -31, 1.4, 0, Math.PI * 2); g.fill();
+  // Headphones.
+  g.strokeStyle = '#0f172a';
+  g.lineWidth = 2.5;
+  g.beginPath(); g.arc(0, -31, 12.5, Math.PI * 1.1, Math.PI * 1.9); g.stroke();
+  g.fillStyle = '#fbbf24';
+  g.beginPath(); g.roundRect(-14, -35, 5, 9, 2); g.fill();
+  g.restore();
 }
 
 function piUpdate(dt) {
@@ -1033,59 +1250,20 @@ function piUpdate(dt) {
   }
   const p = G.pi;
   if (p.phase !== 'hunt') return;
-  p.next -= dt;
-  if (p.next <= 0 && p.spawned < PI_CANDIES) { spawnCandy(); p.next = PI_SPAWN * rand(0.7, 1.2); }
-  const maxX = L.inboxW - 46, maxY = L.inboxH - 46;
-  for (const k of [...p.candies]) {
-    k.life -= dt;
-    if (k.life <= 0) { k.el.remove(); p.candies.splice(p.candies.indexOf(k), 1); continue; }
-    k.x += k.vx * dt;
-    k.y += k.vy * dt;
-    if (k.x < 0 || k.x > maxX) { k.vx = -k.vx; k.x = Math.max(0, Math.min(maxX, k.x)); }
-    if (k.y < TOP || k.y > maxY) { k.vy = -k.vy; k.y = Math.max(TOP, Math.min(maxY, k.y)); }
-    k.el.style.transform = `translate(${k.x}px, ${k.y}px) rotate(${k.life * 140}deg)`;
-    k.el.style.opacity = Math.min(1, k.life / 0.4);
-  }
-  if (p.spawned >= PI_CANDIES && !p.candies.length) endHunt();
+  piPhysics(dt);
+  if (G.pi && G.pi.phase === 'hunt') piDraw();
 }
 
-function spawnCandy() {
-  const p = G.pi;
-  const el = document.createElement('button');
-  el.className = 'candy';
-  el.textContent = pick(CANDY);
-  const k = {
-    id: ++p.spawned, el, life: PI_LIFE,
-    x: rand(0, L.inboxW - 46), y: rand(TOP + 30, L.inboxH - 46),
-    vx: rand(70, 140) * (Math.random() < 0.5 ? -1 : 1), vy: rand(50, 120) * (Math.random() < 0.5 ? -1 : 1),
-  };
-  el.dataset.candy = k.id;
-  el.style.transform = `translate(${k.x}px, ${k.y}px)`;
-  inboxEl.appendChild(el);
-  p.candies.push(k);
-  wood(3200, 0.025);
-}
-
-function catchCandy(id) {
-  const p = G.pi;
-  const k = p.candies.find((x) => x.id === id);
-  if (!k) return;
-  p.candies.splice(p.candies.indexOf(k), 1);
-  k.el.classList.add('caught');
-  setTimeout(() => k.el.remove(), 300);
-  p.caught++;
-  bell(PENTA[(p.caught - 1) % PENTA.length] * 2, 0.5, 0.05);
-  piBar();
-}
-
-// The hunt is over: every candy caught becomes a feature, laid out at the top of the radar (where there's room).
+// The level is over: every candy collected becomes a feature, laid out at the top of the radar (where there's room).
 function endHunt() {
   const p = G.pi;
   p.phase = 'plan';
   inboxEl.classList.remove('pi-hunt');
+  piCanvas.classList.add('hidden');
   for (let i = 0; i < p.caught; i++) placeFree(spawnCard('feature', { quiet: true }));
   if (p.caught) { toast(`✨ ${p.caught} nya features att planera`, 'good'); sfx.resolved(); }
   else toast('Inga godisar, inga features. Planera det du har.', '');
+  sfx.sprint();
   piBar();
 }
 
@@ -1143,10 +1321,12 @@ function cancelDrag() {
 document.addEventListener('pointerdown', (e) => {
   if (!G || !G.running || G.paused) return;
   if (G.pi) {
-    const k = e.target.closest('[data-candy]');
-    if (k) { catchCandy(+k.dataset.candy); return; }
+    if (G.pi.phase === 'hunt') {
+      // Anywhere on the screen jumps, except the buttons in the top bar.
+      if (!e.target.closest('button')) { e.preventDefault(); piPress(true); }
+      return;
+    }
     if (e.target.closest('[data-pigo]')) { endPI(); return; }
-    if (G.pi.phase === 'hunt') return;
   }
   const conf = e.target.closest('[data-conflict]');
   if (conf) { const [l, i] = conf.dataset.conflict.split(':').map(Number); tapConflict(l, i); return; }
@@ -1196,6 +1376,7 @@ document.addEventListener('pointermove', (e) => {
 });
 
 document.addEventListener('pointerup', (e) => {
+  if (G && G.pi && G.pi.phase === 'hunt') piPress(false);
   if (!drag) return;
   const d = drag;
   if (d.moving) {
@@ -1227,8 +1408,9 @@ function showHi() {
 function start() {
   initAudio();
   if (AC && AC.state === 'suspended') AC.resume();
-  inboxEl.querySelectorAll('.card, .candy').forEach((el) => el.remove());
+  inboxEl.querySelectorAll('.card').forEach((el) => el.remove());
   inboxEl.classList.remove('pi-hunt');
+  piCanvas.classList.add('hidden');
   toastsEl.innerHTML = '';
   cancelDrag();
   tipQueue.length = 0;
