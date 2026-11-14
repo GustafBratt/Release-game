@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1020">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Release Manager</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game">
+    <header id="hud">
+      <div class="score">⭐ <span id="score">0</span></div>
+      <div class="sprint"><span id="sprint">Sprint 1</span><span class="dbprod hidden" id="dbprod" title="Databasschemat i produktion"></span></div>
+      <button class="icon-btn" id="mute-btn" aria-label="Ljud">🔊</button>
+      <button class="icon-btn" id="pause-btn" aria-label="Paus">⏸</button>
+    </header>
+
+    <main id="inbox">
+      <div class="inbox-label">Inkommande ändringar</div>
+      <div id="toasts"></div>
+      <div id="banner"></div>
+    </main>
+
+    <section id="releases"></section>
+
+    <div class="overlay" id="start-screen">
+      <div class="panel intro" id="intro-panel">
+        <!-- data-start: shown before the first game. data-key: also shown as an info card the first time it comes up in play. -->
+        <section class="page" data-key="intro" data-start>
+          <h1>Release Manager</h1>
+          <p class="sub">Teamet levererar ändringar hela tiden. Ditt jobb är att få ut dem i produktion, så fort som möjligt.</p>
+          <div class="demo-radar">
+            <div class="card demo-card" data-mod="auth">
+              <div class="c-top"><span class="ic">🐛</span><span class="mod">auth</span></div>
+              <div class="c-title">Krasch vid utloggning</div>
+            </div>
+            <span class="demo-arrow">⬇</span>
+            <div class="demo-line"></div>
+          </div>
+          <ul class="rules icon-rules">
+            <li><span class="ri">👆</span><span>Ändringar dyker upp på <b>radarn</b> och sjunker mot den röda linjen. <b>Dra</b> en ändring till en release, eller <b>tryck</b> på den och sedan på releasen.</span></li>
+            <li><span class="ri">🚀</span><span>Releaser har inget datum. De går ut när du trycker <b>Släpp</b>, i nummerordning: den längst till vänster först. Det finns bara <b>en pipeline</b>, så en release i taget, och en deploy tar 4 s. Medan en deployas kan du köa nästa.</span></li>
+            <li><span class="ri">🔗</span><span>Ändringar i samma release är <b>ihopmergade</b> och går inte att sära på. Tänk efter innan du lägger dem ihop.</span></li>
+            <li><span class="ri">⚡</span><span><b>Snabbhet ger poäng.</b> Ju kortare tid från radar till prod, desto mer är ändringen värd. En release har 4 platser.</span></li>
+            <li><span class="ri">💀</span><span>Vissa misstag är så allvarliga att det blir <b>game over</b>. Du får veta vilka när de dyker upp.</span></li>
+          </ul>
+        </section>
+
+        <section class="page" data-key="bottom" data-start>
+          <h2>Når den botten?</h2>
+          <p class="sub">Ingen ändring försvinner. Hinner du inte planera den följer den med i nästa release ändå, som i verkligheten.</p>
+          <ul class="rules icon-rules">
+            <li><span class="ri">⚠️</span><span>Den hamnar i releasen <b>längst till vänster</b>, även om den redan är full.</span></li>
+            <li><span class="ri">🧪</span><span>Den är <b>oplanerad och otestad</b> och ger bara halva poängen. Den kan också ställa till det: en konflikt, eller något värre.</span></li>
+            <li><span class="ri">😤</span><span>Släpper du aldrig och releasen når 8 platser tröttnar chefen och deployar den själv.</span></li>
+          </ul>
+          <p class="note">Spelet börjar enkelt. Nya sorters ändringar dyker upp sprint för sprint, och du får ett infokort när något nytt händer.</p>
+        </section>
+
+        <section class="page" data-key="conflict">
+          <h2>⚔️ Git-konflikt!</h2>
+          <p class="sub">Varje ändring hör till en av fyra tjänster. Färgen syns på kortet.</p>
+          <ul class="rules svc-grid">
+            <li><span class="mod" data-mod="auth">auth</span><span>Inloggning</span></li>
+            <li><span class="mod" data-mod="kassa">kassa</span><span>Betalning</span></li>
+            <li><span class="mod" data-mod="sok">sök</span><span>Sökningen</span></li>
+            <li><span class="mod" data-mod="app">app</span><span>Mobilappen</span></li>
+          </ul>
+          <ul class="rules icon-rules">
+            <li><span class="ri">⚔️</span><span>Två ändringar i <b>samma tjänst</b> i samma release ger en git-konflikt.</span></li>
+            <li><span class="ri">👆</span><span>Tryck på den röda knappen <b>4 gånger</b> för att lösa den. Släpp är spärrat tills den är löst.</span></li>
+            <li><span class="ri">💥</span><span>Går releasen ut ändå (till exempel när chefen deployar) blir det <b>rollback</b>: ändringarna hamnar på radarn igen, och tiden de väntat kostar poäng.</span></li>
+          </ul>
+          <p class="note">Ihopmergade ändringar går inte att flytta isär, så konflikten måste lösas. Sprid ut ändringar i samma tjänst från början.</p>
+        </section>
+
+        <section class="page" data-key="db">
+          <h2>🗄️ Databasändringar</h2>
+          <p class="sub">En databasändring är en migrering av databasen. Den tar 2 platser och är värd 150 p.</p>
+          <ul class="rules icon-rules">
+            <li><span class="ri">🔢</span><span>Migreringarna är numrerade (<span class="dbv">V41</span>, <span class="dbv">V42</span> …) och måste ut i <b>nummerordning</b>.</span></li>
+            <li><span class="ri">⛔</span><span>Ligger V42 i en release medan V41 inte är i prod varnar releasen med ⛔ och en röd Släpp-knapp.</span></li>
+            <li><span class="ri">💀</span><span>Släpper du ändå går databasen sönder: <b>game over</b>.</span></li>
+          </ul>
+          <p class="note">Ta migreringarna i tur och ordning: den äldsta först.</p>
+        </section>
+
+        <section class="page" data-key="dbOrder">
+          <h2>🗄️ Fel ordning!</h2>
+          <p class="sub">Migreringarna dyker inte alltid upp i den ordning de skapades. Ibland kommer <span class="dbv">V62</span> några sekunder före <span class="dbv">V61</span>.</p>
+          <ul class="rules icon-rules">
+            <li><span class="ri">⏳</span><span>Den som saknas är på väg. Releasen visar ⛔ tills den ligger på plats, även innan den syns på radarn.</span></li>
+            <li><span class="ri">💀</span><span>Släpp inte V62 förrän V61 är med eller redan i prod. Annars: <b>game over</b>.</span></li>
+          </ul>
+          <p class="note">Ser du ett hopp i numreringen: vänta in den som saknas.</p>
+        </section>
+
+        <section class="page" data-key="sec">
+          <h2>🔒 Säkerhetsfix!</h2>
+          <p class="sub">Säkerhetsfixar faller snabbare och är värda 250 p.</p>
+          <ul class="rules icon-rules">
+            <li><span class="ri">⏰</span><span>De måste vara <b>i prod inom 30 s</b> från att de dyker upp. Klockan syns på kortet, och på releasen när fixen ligger där.</span></li>
+            <li><span class="ri">💀</span><span>Hinner den inte ut utnyttjas hålet: <b>game over</b>.</span></li>
+          </ul>
+          <p class="note">Lägg den i en release och släpp direkt, även om releasen inte är full.</p>
+        </section>
+
+        <section class="page" data-key="api">
+          <h2>🔌 API-ändringar</h2>
+          <p class="sub">En API-ändring berör flera tjänster: ett kort för servern och ett för klienten. De har samma bokstav.</p>
+          <div class="demo-pair">
+            <div class="card demo-card2" data-mod="kassa">
+              <div class="c-top"><span class="mod">kassa</span><span class="pair">A×2</span></div>
+              <div class="c-title">/orders server</div>
+            </div>
+            <span class="demo-plus">+</span>
+            <div class="card demo-card2" data-mod="app">
+              <div class="c-top"><span class="mod">app</span><span class="pair">A×2</span></div>
+              <div class="c-title">/orders klient</div>
+            </div>
+          </div>
+          <ul class="rules icon-rules">
+            <li><span class="ri">🔗</span><span>De <b>går inte att dela</b>. Flyttar du ett kort följer det andra med, så det måste finnas plats för båda.</span></li>
+            <li><span class="ri">⛔</span><span>Klienten dyker upp några sekunder efter servern. Tills den ligger i samma release varnar releasen med ⛔ och en röd Släpp-knapp.</span></li>
+            <li><span class="ri">💀</span><span>Släpper du en ofullständig API-ändring går klienterna sönder: <b>game over</b>.</span></li>
+            <li><span class="ri">⭐</span><span>120 p per kort, och +100 p när hela ändringen var planerad.</span></li>
+          </ul>
+        </section>
+
+        <section class="page" data-key="deadline">
+          <h2>⏰ Kundlöfte</h2>
+          <p class="sub">Ibland väntar en kund på en buggfix eller databasändring.</p>
+          <ul class="rules icon-rules">
+            <li><span class="ri">⏰</span><span>Klockan på kortet räknar ner, var ändringen än ligger. Ligger den i en release visar releasen klockan.</span></li>
+            <li><span class="ri">🎉</span><span>Kommer den ut i tid: <b>+150 p</b>. Missar du deadline: <b>game over</b>.</span></li>
+          </ul>
+          <p class="note">Deadlines sitter på ärendena, inte på releaserna.</p>
+        </section>
+
+        <section class="page" data-key="spont">
+          <h2>🔀 main har gått vidare</h2>
+          <p class="sub">Någon annan har mergat till main, och din release måste rebasas.</p>
+          <ul class="rules icon-rules">
+            <li><span class="ri">🔀</span><span>En orange konflikt kan dyka upp av sig själv, även när det bara finns en ändring i releasen.</span></li>
+            <li><span class="ri">👆</span><span>Den löses som en vanlig konflikt: tryck 4 gånger.</span></li>
+          </ul>
+          <p class="note">Ja, det händer alltid när man minst anar det.</p>
+        </section>
+
+        <section class="page" data-key="apiBig">
+          <h2>🔌 Större API-ändringar</h2>
+          <p class="sub">Nu kan en API-ändring beröra 3 eller 4 tjänster. Siffran efter bokstaven visar hur många kort den har.</p>
+          <div class="demo-pair">
+            <div class="card demo-card2 small" data-mod="kassa">
+              <div class="c-top"><span class="mod">kassa</span><span class="pair">B×3</span></div>
+              <div class="c-title">/cart server</div>
+            </div>
+            <div class="card demo-card2 small" data-mod="sok">
+              <div class="c-top"><span class="mod">sök</span><span class="pair">B×3</span></div>
+              <div class="c-title">/cart klient</div>
+            </div>
+            <div class="card demo-card2 small" data-mod="app">
+              <div class="c-top"><span class="mod">app</span><span class="pair">B×3</span></div>
+              <div class="c-title">/cart klient</div>
+            </div>
+          </div>
+          <ul class="rules icon-rules">
+            <li><span class="ri">🔗</span><span>Alla korten måste i samma release. En ändring med 4 kort fyller en hel release.</span></li>
+            <li><span class="ri">⭐</span><span>+100 p per klient när hela ändringen var planerad.</span></li>
+          </ul>
+        </section>
+
+        <div class="dots" id="dots"></div>
+        <div class="intro-nav">
+          <button class="nav-btn" id="prev-btn">‹ Tillbaka</button>
+          <button class="big-btn" id="next-btn">Nästa ›</button>
+        </div>
+        <button class="link-btn" id="skip-btn">Hoppa över och starta direkt</button>
+        <p class="hi" id="hi-start"></p>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="pause-screen">
+      <div class="panel">
+        <h2>Paus</h2>
+        <p class="sub">Retro? Nej, det hinns inte med.</p>
+        <button class="big-btn" id="resume-btn">Fortsätt</button>
+        <button class="link-btn" id="help-btn">Visa instruktionerna</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="over-screen">
+      <div class="panel">
+        <h2 id="over-title">Game over</h2>
+        <p class="reason" id="over-reason"></p>
+        <p class="sub" id="over-text"></p>
+        <div class="stats" id="over-stats"></div>
+        <button class="big-btn" id="again-btn">Nytt mjukvaruprojekt</button>
+      </div>
+    </div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
