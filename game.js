@@ -996,8 +996,9 @@ function update(dt) {
 }
 
 // ---------- PI planning ----------
-// Everything else stands still: no spawns, no falling, no deadlines, no deploys. G.t doesn't move either,
-// so the features' lead time only starts counting when the sprint does.
+// Everything else stands still: no spawns, no falling, no deadlines. G.t doesn't move either, so the features'
+// lead time only starts counting when the sprint does. Deploys do run to the end (a queued release too),
+// so the planning starts with lanes to fill.
 
 const piEl = $('#pi');
 
@@ -1025,6 +1026,11 @@ function piBar() {
 }
 
 function piUpdate(dt) {
+  for (const r of [...G.releases]) {
+    if (r.state !== 'deploying') continue;
+    r.deployLeft -= dt;
+    if (r.deployLeft <= 0) { finishDeploy(r); if (!G.running) return; }
+  }
   const p = G.pi;
   if (p.phase !== 'hunt') return;
   p.next -= dt;
@@ -1085,7 +1091,7 @@ function endHunt() {
 
 function placeFree(c) {
   const span = L.inboxH - CARD_H - TOP - 6;
-  const gap = (CARD_H + 6) / span; // one card's height, in progress units
+  const gap = (CARD_H + 10) / span; // one card's height plus margin, in progress units
   const from = 34 / span;          // below the PI bar
   for (let p = from; p <= 0.75; p += gap / 2) {
     for (const col of [0, 1, 2]) {
