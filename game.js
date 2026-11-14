@@ -53,6 +53,8 @@ const TOP = 22;              // space for the inbox label
 const $ = (s) => document.querySelector(s);
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+// Integers shown to the player get Swedish thousands separators: 12 345 (a non-breaking space).
+const fmt = (n) => Math.round(n).toLocaleString('sv-SE');
 
 function storageGet(key, fallback) {
   try { const v = localStorage.getItem(key); return v === null ? fallback : v; } catch { return fallback; }
@@ -744,7 +746,7 @@ function finishDeploy(r) {
     G.score += pts;
     G.shipped++;
     sfx.ship();
-    toast(`🚀 v${r.version} i prod! +${pts} · ledtid ${avg} s`, 'good');
+    toast(`🚀 v${r.version} i prod! +${fmt(pts)} · ledtid ${avg} s`, 'good');
     if (kept) toast(`⏰ Kundlöfte hållet${kept > 1 ? ` ×${kept}` : ''}!`, 'good');
     if (slipped) toast(`⚠️ ${slipped} oplanerad${slipped > 1 ? 'e' : ''} ändring${slipped > 1 ? 'ar' : ''}: halva poängen`, 'warn');
   } else {
@@ -920,7 +922,7 @@ function render() {
     if (el._ship.textContent !== shipText) el._ship.textContent = shipText;
     for (const [p, c] of el._dues) p.textContent = c && c.dueLeft !== null ? Math.ceil(c.dueLeft) + 's' : '';
   }
-  $('#score').textContent = G.score;
+  $('#score').textContent = fmt(G.score);
   $('#sprint').textContent = G.pi ? 'PI planning' : `Sprint ${G.sprint}`;
   const dbEl = $('#dbprod');
   dbEl.classList.toggle('hidden', !G.dbShown);
@@ -1404,7 +1406,7 @@ document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 function showHi() {
   const hi = +storageGet('rm-hi', '0');
-  $('#hi-start').textContent = hi ? `Rekord: ${hi} poäng` : '';
+  $('#hi-start').textContent = hi ? `Rekord: ${fmt(hi)} poäng` : '';
 }
 
 function start() {
@@ -1442,11 +1444,11 @@ function gameOver(title, why) {
   const isHi = G.score > hi;
   if (isHi) storageSet('rm-hi', String(G.score));
   const min = Math.floor(G.t / 60), sec = Math.floor(G.t % 60);
-  $('#over-text').textContent = isHi ? 'Nytt rekord! Det blir en fin incidentrapport.' : `Rekord: ${hi} poäng. Postmortem bokad till måndag 08:00.`;
+  $('#over-text').textContent = isHi ? 'Nytt rekord! Det blir en fin incidentrapport.' : `Rekord: ${fmt(hi)} poäng. Postmortem bokad till måndag 08:00.`;
   $('#over-stats').innerHTML = `
-    <div><b>${G.score}</b>poäng</div>
-    <div><b>${G.shipped}</b>releaser i prod</div>
-    <div><b>${G.leadCount ? Math.round(G.leadSum / G.leadCount) + ' s' : '–'}</b>snittledtid</div>
+    <div><b>${fmt(G.score)}</b>poäng</div>
+    <div><b>${fmt(G.shipped)}</b>releaser i prod</div>
+    <div><b>${G.leadCount ? fmt(G.leadSum / G.leadCount) + ' s' : '–'}</b>snittledtid</div>
     <div><b>${min}:${String(sec).padStart(2, '0')}</b>överlevde (sprint ${G.sprint})</div>`;
   $('#over-screen').classList.remove('hidden');
 }

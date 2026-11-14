@@ -30,6 +30,8 @@ To test rules without playing, drive the game from the page console: `start()`, 
 
 **Lanes are always in version order.** `G.releases` is an array where index = `r.lane`. When a release ships, `rotateReleases` removes it, the ones to its right slide left (`r.lane` is renumbered and every lane re-rendered), and a new release enters on the right. Releases have no date or timer: they ship only when the player presses Släpp, or when one reaches `FORCE_SLOTS` (the boss deploys it). Only the leftmost release (`lane 0`) can ship, so versions reach prod in order. The other lanes' buttons say "Efter v…". While lane 0 deploys, lane 1 can be queued (`canQueue`, `r.queued`, a chess-style pre-move): pressing its button again cancels, and `rotateReleases` starts it as soon as it becomes lane 0, unless a conflict is unresolved by then. Anything that refers to a release over time uses `r.id`, never the lane index.
 
+Integers shown to the player go through `fmt()` (Swedish thousands separators, `12 345`).
+
 **There is no health meter.** The game runs until the player makes one of three serious mistakes, each calling `gameOver(title, why)`, which shows the reason: releasing migrations out of order, releasing an incomplete API change (both checked in `finishDeploy`), or missing a deadline (`missDeadline`). Släpp is deliberately *not* disabled for the first two: the lane warns instead (a red "⛔ …" label from `blockingMigrations`/`incompleteApi`, and a red `.ship.danger` button), so the mistake stays the player's. Smaller mistakes only cost time and therefore points.
 
 **Rules** (enforced in `canPlace`, `tryPlace`, `placeInto` and `finishDeploy`):
