@@ -21,6 +21,7 @@
       <div class="inbox-label">Inkommande ändringar</div>
       <div id="toasts"></div>
       <div id="banner"></div>
+      <div id="pi" class="hidden"></div>
     </main>
 
     <section id="releases"></section>
@@ -40,11 +41,11 @@
             <div class="demo-line"></div>
           </div>
           <ul class="rules icon-rules">
-            <li><span class="ri">👆</span><span>Ändringar dyker upp på <b>radarn</b> och sjunker mot den röda linjen. <b>Dra</b> en ändring till en release, eller <b>tryck</b> på den och sedan på releasen.</span></li>
-            <li><span class="ri">🚀</span><span>Releaser har inget datum. De går ut när du trycker <b>Släpp</b>, i nummerordning: den längst till vänster först. Det finns bara <b>en pipeline</b>, så en release i taget, och en deploy tar 4 s. Medan en deployas kan du köa nästa.</span></li>
-            <li><span class="ri">🔗</span><span>Ändringar i samma release är <b>ihopmergade</b> och går inte att sära på. Tänk efter innan du lägger dem ihop.</span></li>
-            <li><span class="ri">⚡</span><span><b>Snabbhet ger poäng.</b> Ju kortare tid från radar till prod, desto mer är ändringen värd. En release har 4 platser.</span></li>
-            <li><span class="ri">💀</span><span>Vissa misstag är så allvarliga att det blir <b>game over</b>. Du får veta vilka när de dyker upp.</span></li>
+            <li><span>Ändringar dyker upp på <b>radarn</b> och sjunker mot den röda linjen. <b>Dra</b> en ändring till en release, eller <b>tryck</b> på den och sedan på releasen.</span></li>
+            <li><span>Releaser har inget datum. De går ut när du trycker <b>Släpp</b>, i nummerordning: den längst till vänster först. Det finns bara <b>en pipeline</b>, så en release i taget, och en deploy tar 4 s. Medan en deployas kan du köa nästa.</span></li>
+            <li><span>Ändringar i samma release är <b>ihopmergade</b> och går inte att sära på. Tänk efter innan du lägger dem ihop.</span></li>
+            <li><span><b>Snabbhet ger poäng.</b> Ju kortare tid från radar till prod, desto mer är ändringen värd. En release har 4 platser.</span></li>
+            <li><span>Vissa misstag är så allvarliga att det blir <b>game over</b>. Du får veta vilka när de dyker upp.</span></li>
           </ul>
         </section>
 
@@ -52,9 +53,9 @@
           <h2>Når den botten?</h2>
           <p class="sub">Ingen ändring försvinner. Hinner du inte planera den följer den med i nästa release ändå, som i verkligheten.</p>
           <ul class="rules icon-rules">
-            <li><span class="ri">⚠️</span><span>Den hamnar i releasen <b>längst till vänster</b>, även om den redan är full.</span></li>
-            <li><span class="ri">🧪</span><span>Den är <b>oplanerad och otestad</b> och ger bara halva poängen. Den kan också ställa till det: en konflikt, eller något värre.</span></li>
-            <li><span class="ri">😤</span><span>Släpper du aldrig och releasen når 8 platser tröttnar chefen och deployar den själv.</span></li>
+            <li><span>Den hamnar i releasen <b>längst till vänster</b>, även om den redan är full.</span></li>
+            <li><span>Den är <b>oplanerad och otestad</b> och ger bara halva poängen. Den kan också ställa till det: en konflikt, eller något värre.</span></li>
+            <li><span>Släpper du aldrig och releasen når 8 platser tröttnar chefen och deployar den själv.</span></li>
           </ul>
           <p class="note">Spelet börjar enkelt. Nya sorters ändringar dyker upp sprint för sprint, och du får ett infokort när något nytt händer.</p>
         </section>
@@ -69,9 +70,9 @@
             <li><span class="mod" data-mod="app">app</span><span>Mobilappen</span></li>
           </ul>
           <ul class="rules icon-rules">
-            <li><span class="ri">⚔️</span><span>Två ändringar i <b>samma tjänst</b> i samma release ger en git-konflikt.</span></li>
-            <li><span class="ri">👆</span><span>Tryck på den röda knappen <b>4 gånger</b> för att lösa den. Släpp är spärrat tills den är löst.</span></li>
-            <li><span class="ri">💥</span><span>Går releasen ut ändå (till exempel när chefen deployar) blir det <b>rollback</b>: ändringarna hamnar på radarn igen, och tiden de väntat kostar poäng.</span></li>
+            <li><span>Två ändringar i <b>samma tjänst</b> i samma release ger en git-konflikt.</span></li>
+            <li><span>Tryck på den röda knappen <b>4 gånger</b> för att lösa den. Släpp är spärrat tills den är löst.</span></li>
+            <li><span>Går releasen ut ändå (till exempel när chefen deployar) blir det <b>rollback</b>: ändringarna hamnar på radarn igen, och tiden de väntat kostar poäng.</span></li>
           </ul>
           <p class="note">Ihopmergade ändringar går inte att flytta isär, så konflikten måste lösas. Sprid ut ändringar i samma tjänst från början.</p>
         </section>
@@ -80,9 +81,9 @@
           <h2>🗄️ Databasändringar</h2>
           <p class="sub">En databasändring är en migrering av databasen. Den tar 2 platser och är värd 150 p.</p>
           <ul class="rules icon-rules">
-            <li><span class="ri">🔢</span><span>Migreringarna är numrerade (<span class="dbv">V41</span>, <span class="dbv">V42</span> …) och måste ut i <b>nummerordning</b>.</span></li>
-            <li><span class="ri">⛔</span><span>Ligger V42 i en release medan V41 inte är i prod varnar releasen med ⛔ och en röd Släpp-knapp.</span></li>
-            <li><span class="ri">💀</span><span>Släpper du ändå går databasen sönder: <b>game over</b>.</span></li>
+            <li><span>Migreringarna är numrerade (<span class="dbv">V41</span>, <span class="dbv">V42</span> …) och måste ut i <b>nummerordning</b>.</span></li>
+            <li><span>Ligger V42 i en release medan V41 inte är i prod varnar releasen med ⛔ och en röd Släpp-knapp.</span></li>
+            <li><span>Släpper du ändå går databasen sönder: <b>game over</b>.</span></li>
           </ul>
           <p class="note">Ta migreringarna i tur och ordning: den äldsta först.</p>
         </section>
@@ -91,8 +92,8 @@
           <h2>🗄️ Fel ordning!</h2>
           <p class="sub">Migreringarna dyker inte alltid upp i den ordning de skapades. Ibland kommer <span class="dbv">V62</span> några sekunder före <span class="dbv">V61</span>.</p>
           <ul class="rules icon-rules">
-            <li><span class="ri">⏳</span><span>Den som saknas är på väg. Releasen visar ⛔ tills den ligger på plats, även innan den syns på radarn.</span></li>
-            <li><span class="ri">💀</span><span>Släpp inte V62 förrän V61 är med eller redan i prod. Annars: <b>game over</b>.</span></li>
+            <li><span>Den som saknas är på väg. Releasen visar ⛔ tills den ligger på plats, även innan den syns på radarn.</span></li>
+            <li><span>Släpp inte V62 förrän V61 är med eller redan i prod. Annars: <b>game over</b>.</span></li>
           </ul>
           <p class="note">Ser du ett hopp i numreringen: vänta in den som saknas.</p>
         </section>
@@ -101,8 +102,8 @@
           <h2>🔒 Säkerhetsfix!</h2>
           <p class="sub">Säkerhetsfixar faller snabbare och är värda 250 p.</p>
           <ul class="rules icon-rules">
-            <li><span class="ri">⏰</span><span>De måste vara <b>i prod inom 30 s</b> från att de dyker upp. Klockan syns på kortet, och på releasen när fixen ligger där.</span></li>
-            <li><span class="ri">💀</span><span>Hinner den inte ut utnyttjas hålet: <b>game over</b>.</span></li>
+            <li><span>De måste vara <b>i prod inom 30 s</b> från att de dyker upp. Klockan syns på kortet, och på releasen när fixen ligger där.</span></li>
+            <li><span>Hinner den inte ut utnyttjas hålet: <b>game over</b>.</span></li>
           </ul>
           <p class="note">Lägg den i en release och släpp direkt, även om releasen inte är full.</p>
         </section>
@@ -122,10 +123,10 @@
             </div>
           </div>
           <ul class="rules icon-rules">
-            <li><span class="ri">🔗</span><span>De <b>går inte att dela</b>. Flyttar du ett kort följer det andra med, så det måste finnas plats för båda.</span></li>
-            <li><span class="ri">⛔</span><span>Klienten dyker upp några sekunder efter servern. Tills den ligger i samma release varnar releasen med ⛔ och en röd Släpp-knapp.</span></li>
-            <li><span class="ri">💀</span><span>Släpper du en ofullständig API-ändring går klienterna sönder: <b>game over</b>.</span></li>
-            <li><span class="ri">⭐</span><span>120 p per kort, och +100 p när hela ändringen var planerad.</span></li>
+            <li><span>De <b>går inte att dela</b>. Flyttar du ett kort följer det andra med, så det måste finnas plats för båda.</span></li>
+            <li><span>Klienten dyker upp några sekunder efter servern. Tills den ligger i samma release varnar releasen med ⛔ och en röd Släpp-knapp.</span></li>
+            <li><span>Släpper du en ofullständig API-ändring går klienterna sönder: <b>game over</b>.</span></li>
+            <li><span>120 p per kort, och +100 p när hela ändringen var planerad.</span></li>
           </ul>
         </section>
 
@@ -133,8 +134,8 @@
           <h2>⏰ Kundlöfte</h2>
           <p class="sub">Ibland väntar en kund på en buggfix eller databasändring.</p>
           <ul class="rules icon-rules">
-            <li><span class="ri">⏰</span><span>Klockan på kortet räknar ner, var ändringen än ligger. Ligger den i en release visar releasen klockan.</span></li>
-            <li><span class="ri">🎉</span><span>Kommer den ut i tid: <b>+150 p</b>. Missar du deadline: <b>game over</b>.</span></li>
+            <li><span>Klockan på kortet räknar ner, var ändringen än ligger. Ligger den i en release visar releasen klockan.</span></li>
+            <li><span>Kommer den ut i tid: <b>+150 p</b>. Missar du deadline: <b>game over</b>.</span></li>
           </ul>
           <p class="note">Deadlines sitter på ärendena, inte på releaserna.</p>
         </section>
@@ -143,8 +144,8 @@
           <h2>🔀 main har gått vidare</h2>
           <p class="sub">Någon annan har mergat till main, och din release måste rebasas.</p>
           <ul class="rules icon-rules">
-            <li><span class="ri">🔀</span><span>En orange konflikt kan dyka upp av sig själv, även när det bara finns en ändring i releasen.</span></li>
-            <li><span class="ri">👆</span><span>Den löses som en vanlig konflikt: tryck 4 gånger.</span></li>
+            <li><span>En orange konflikt kan dyka upp av sig själv, även när det bara finns en ändring i releasen.</span></li>
+            <li><span>Den löses som en vanlig konflikt: tryck 4 gånger.</span></li>
           </ul>
           <p class="note">Ja, det händer alltid när man minst anar det.</p>
         </section>
@@ -167,9 +168,21 @@
             </div>
           </div>
           <ul class="rules icon-rules">
-            <li><span class="ri">🔗</span><span>Alla korten måste i samma release. En ändring med 4 kort fyller en hel release.</span></li>
-            <li><span class="ri">⭐</span><span>+100 p per klient när hela ändringen var planerad.</span></li>
+            <li><span>Alla korten måste i samma release. En ändring med 4 kort fyller en hel release.</span></li>
+            <li><span>+100 p per klient när hela ändringen var planerad.</span></li>
           </ul>
+        </section>
+
+        <section class="page" data-key="pi">
+          <h2>🍬 PI planning</h2>
+          <p class="sub">Var tredje sprint samlas hela tåget och planerar nästa period. Det bjuds på godis.</p>
+          <ul class="rules icon-rules">
+            <li><span>Godisarna studsar runt på radarn en kort stund. <b>Tryck</b> på dem för att fånga dem.</span></li>
+            <li><span>Varje godis du fångar blir en ny <b>feature</b> ✨, värd 200 p.</span></li>
+            <li><span>Sen står allt still. Lägg in featurerna i releaserna <b>i lugn och ro</b>: ingen klocka går, och inget faller.</span></li>
+            <li><span>Tryck <b>Starta sprint</b> när du är klar. Det som inte är planerat börjar falla igen.</span></li>
+          </ul>
+          <p class="note">Fler godisar ger fler poäng, men också fler kort att få plats med.</p>
         </section>
 
         <div class="dots" id="dots"></div>

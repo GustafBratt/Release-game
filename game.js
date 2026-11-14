@@ -14,6 +14,7 @@ const TYPES = {
   sec: { icon: '🔒', size: 1, points: 250 },
   db: { icon: '🗄️', size: 2, points: 150 },
   api: { icon: '🔌', size: 1, points: 120 },
+  feature: { icon: '✨', size: 1, points: 200 }, // only from PI planning
 };
 
 const TITLES = {
@@ -22,6 +23,8 @@ const TITLES = {
     'Vit text på vitt', 'Timeout vid inloggning', 'Off-by-one i listan', 'Fel tidszon', 'Emoji kraschar appen'],
   sec: ['XSS i kommentarer', 'SQL-injektion', 'Läckt API-nyckel', 'CVE i beroende', 'Öppen redirect',
     'Svag lösenordshash', 'CSRF i formulär', 'Admin utan inloggning'],
+  feature: ['Mörkt läge', 'Önskelista', 'Push-notiser', 'Spara sökningar', 'Betyg på varor', 'Dela varukorg',
+    'Inloggning med passkey', 'Snabbköp', 'Ny startsida', 'Presentkort', 'Orderhistorik', 'Rekommendationer'],
   db: ['Nytt index', 'Ny kolumn', 'Byt kolumntyp', 'Ny tabell', 'Datamigrering', 'Dela upp tabell', 'Ta bort kolumn'],
 };
 const ENDPOINTS = ['/orders', '/users', '/search', '/cart', '/login', '/items', '/payments'];
@@ -35,6 +38,12 @@ const SEC_DUE = 30;          // a security fix must be in prod this many seconds
 const DUE_BONUS = 150;       // customer deadline kept
 const FORCE_SLOTS = 8;       // a release this overfull gets deployed by someone else
 const CARD_H = 62;
+// PI planning: after every third sprint the game stops for a candy hunt, then calm planning.
+const PI_EVERY = 3;
+const PI_CANDIES = 8;        // candies per hunt; each one caught becomes a feature
+const PI_SPAWN = 0.75;       // seconds between candies
+const PI_LIFE = 1.7;         // seconds a candy stays on the radar
+const CANDY = ['🍬', '🍭', '🍫', '🍩', '🧁', '🍪'];
 const TOP = 22;              // space for the inbox label
 
 // ---------- Helpers ----------
@@ -284,6 +293,7 @@ function newGame() {
     shipped: 0, broken: 0, changes: 0, selected: null, seenTips: new Set(),
     dbProd: 40, // schema version in prod: the highest migration shipped (they ship in order)
     leadSum: 0, leadCount: 0, // lead time from radar to prod, over every change shipped
+    pi: null, // PI planning in progress: { phase: 'hunt' | 'plan', spawned, caught, next, candies }
   };
 }
 
@@ -352,7 +362,7 @@ function spawnCard(type, opts = {}) {
   if (type === 'db') tip('db');
   if (type === 'sec') { sfx.alarm(); toast('🔒 Säkerhetsfix inkommen – ut i prod inom 30 s!', 'warn'); tip('sec'); }
   else if (c.dueLeft !== null) { sfx.deadline(); toast(`⏰ Kund väntar: ${c.title}`, 'warn'); tip('deadline'); }
-  else sfx.spawn();
+  else if (!opts.quiet) sfx.spawn();
   return c;
 }
 
@@ -658,6 +668,7 @@ function shipEarly(lane) {
     return;
   }
   // Releases go out in version order: only the leftmost one can be released.
+  if (G.pi) return;
   if (!r || r.lane !== 0 || r.state !== 'open' || !r.cards.length || unresolved(r).length || pipelineBusy()) return;
   startDeploy(r);
 }
@@ -894,7 +905,7 @@ function render() {
     const queueable = canQueue(r);
     const waiting = r.state === 'open' && r.lane > 0 && !queueable;
     const busy = r.state === 'open' && !waiting && !queueable && pipelineBusy();
-    const dis = r.state !== 'open' || waiting || busy || !r.cards.length || unresolved(r).length > 0;
+    const dis = !!G.pi || r.state !== 'open' || waiting || busy || !r.cards.length || unresolved(r).length > 0;
     if (!queueable && r.queued && r.lane !== 0) r.queued = false;
     el._ship.classList.toggle('queued', !!r.queued);
     el._ship.classList.toggle('danger', !dis && (block.length > 0 || partial.length > 0));
@@ -905,7 +916,7 @@ function render() {
     for (const [p, c] of el._dues) p.textContent = c && c.dueLeft !== null ? Math.ceil(c.dueLeft) + 's' : '';
   }
   $('#score').textContent = G.score;
-  $('#sprint').textContent = `Sprint ${G.sprint}`;
+  $('#sprint').textContent = G.pi ? 'PI planning' : `Sprint ${G.sprint}`;
   const dbEl = $('#dbprod');
   dbEl.classList.toggle('hidden', !unlocked('db'));
   const dbText = `🗄️ V${G.dbProd} i prod`;
@@ -933,7 +944,12 @@ function banner(title, sub) {
 function update(dt) {
   G.t += dt;
   const sp = Math.floor(G.t / SPRINT_LEN) + 1;
-  if (sp > G.sprint) { G.sprint = sp; banner(`Sprint ${sp}`, 'Tempot ökar'); sfx.sprint(); }
+  if (sp > G.sprint) {
+    G.sprint = sp;
+    if ((sp - 1) % PI_EVERY === 0) { startPI(); return; }
+    banner(`Sprint ${sp}`, 'Tempot ökar');
+    sfx.sprint();
+  }
 
   G.spawnIn -= dt;
   if (G.spawnIn <= 0) { spawnRandom(); G.spawnIn = spawnInterval() * rand(0.7, 1.3); }
@@ -979,12 +995,120 @@ function update(dt) {
 
 }
 
+// ---------- PI planning ----------
+// Everything else stands still: no spawns, no falling, no deadlines, no deploys. G.t doesn't move either,
+// so the features' lead time only starts counting when the sprint does.
+
+const piEl = $('#pi');
+
+function startPI() {
+  cancelDrag();
+  select(null);
+  G.pi = { phase: 'hunt', spawned: 0, caught: 0, next: 0.8, candies: [] };
+  inboxEl.classList.add('pi-hunt');
+  piBar();
+  render();
+  banner('PI planning', 'Fånga godisarna!');
+  sfx.sprint();
+  tip('pi');
+}
+
+function piBar() {
+  const p = G.pi;
+  piEl.classList.toggle('hidden', !p);
+  document.body.classList.toggle('pi', !!p);
+  if (!p) return;
+  piEl.classList.toggle('plan', p.phase === 'plan');
+  piEl.innerHTML = p.phase === 'hunt'
+    ? `🍬 Fånga godis! <b>${p.caught}</b> fångade`
+    : `<span>Planera i lugn och ro</span><button data-pigo>▶ Starta sprint ${G.sprint}</button>`;
+}
+
+function piUpdate(dt) {
+  const p = G.pi;
+  if (p.phase !== 'hunt') return;
+  p.next -= dt;
+  if (p.next <= 0 && p.spawned < PI_CANDIES) { spawnCandy(); p.next = PI_SPAWN * rand(0.7, 1.2); }
+  const maxX = L.inboxW - 46, maxY = L.inboxH - 46;
+  for (const k of [...p.candies]) {
+    k.life -= dt;
+    if (k.life <= 0) { k.el.remove(); p.candies.splice(p.candies.indexOf(k), 1); continue; }
+    k.x += k.vx * dt;
+    k.y += k.vy * dt;
+    if (k.x < 0 || k.x > maxX) { k.vx = -k.vx; k.x = Math.max(0, Math.min(maxX, k.x)); }
+    if (k.y < TOP || k.y > maxY) { k.vy = -k.vy; k.y = Math.max(TOP, Math.min(maxY, k.y)); }
+    k.el.style.transform = `translate(${k.x}px, ${k.y}px) rotate(${k.life * 140}deg)`;
+    k.el.style.opacity = Math.min(1, k.life / 0.4);
+  }
+  if (p.spawned >= PI_CANDIES && !p.candies.length) endHunt();
+}
+
+function spawnCandy() {
+  const p = G.pi;
+  const el = document.createElement('button');
+  el.className = 'candy';
+  el.textContent = pick(CANDY);
+  const k = {
+    id: ++p.spawned, el, life: PI_LIFE,
+    x: rand(0, L.inboxW - 46), y: rand(TOP + 30, L.inboxH - 46),
+    vx: rand(70, 140) * (Math.random() < 0.5 ? -1 : 1), vy: rand(50, 120) * (Math.random() < 0.5 ? -1 : 1),
+  };
+  el.dataset.candy = k.id;
+  el.style.transform = `translate(${k.x}px, ${k.y}px)`;
+  inboxEl.appendChild(el);
+  p.candies.push(k);
+  wood(3200, 0.025);
+}
+
+function catchCandy(id) {
+  const p = G.pi;
+  const k = p.candies.find((x) => x.id === id);
+  if (!k) return;
+  p.candies.splice(p.candies.indexOf(k), 1);
+  k.el.classList.add('caught');
+  setTimeout(() => k.el.remove(), 300);
+  p.caught++;
+  bell(PENTA[(p.caught - 1) % PENTA.length] * 2, 0.5, 0.05);
+  piBar();
+}
+
+// The hunt is over: every candy caught becomes a feature, laid out at the top of the radar (where there's room).
+function endHunt() {
+  const p = G.pi;
+  p.phase = 'plan';
+  inboxEl.classList.remove('pi-hunt');
+  for (let i = 0; i < p.caught; i++) placeFree(spawnCard('feature', { quiet: true }));
+  if (p.caught) { toast(`✨ ${p.caught} nya features att planera`, 'good'); sfx.resolved(); }
+  else toast('Inga godisar, inga features. Planera det du har.', '');
+  piBar();
+}
+
+function placeFree(c) {
+  const span = L.inboxH - CARD_H - TOP - 6;
+  const gap = (CARD_H + 6) / span; // one card's height, in progress units
+  const from = 34 / span;          // below the PI bar
+  for (let p = from; p <= 0.75; p += gap / 2) {
+    for (const col of [0, 1, 2]) {
+      const clash = [...G.cards.values()].some((o) => o !== c && o.where === 'inbox' && o.col === col && Math.abs(o.progress - p) < gap);
+      if (!clash) { c.col = col; c.progress = p; positionCard(c); return; }
+    }
+  }
+}
+
+function endPI() {
+  G.pi = null;
+  piBar();
+  banner(`Sprint ${G.sprint}`, 'Planen är satt. Kör!');
+  sfx.sprint();
+  last = performance.now();
+}
+
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   if (G && G.running && !G.paused) {
-    update(dt);
+    if (G.pi) piUpdate(dt); else update(dt);
     musicTick();
     if (G.running) render();
   }
@@ -1012,6 +1136,12 @@ function cancelDrag() {
 
 document.addEventListener('pointerdown', (e) => {
   if (!G || !G.running || G.paused) return;
+  if (G.pi) {
+    const k = e.target.closest('[data-candy]');
+    if (k) { catchCandy(+k.dataset.candy); return; }
+    if (e.target.closest('[data-pigo]')) { endPI(); return; }
+    if (G.pi.phase === 'hunt') return;
+  }
   const conf = e.target.closest('[data-conflict]');
   if (conf) { const [l, i] = conf.dataset.conflict.split(':').map(Number); tapConflict(l, i); return; }
   const ship = e.target.closest('[data-ship]');
@@ -1091,12 +1221,14 @@ function showHi() {
 function start() {
   initAudio();
   if (AC && AC.state === 'suspended') AC.resume();
-  inboxEl.querySelectorAll('.card').forEach((el) => el.remove());
+  inboxEl.querySelectorAll('.card, .candy').forEach((el) => el.remove());
+  inboxEl.classList.remove('pi-hunt');
   toastsEl.innerHTML = '';
   cancelDrag();
   tipQueue.length = 0;
   tipOpen = false;
   G = newGame();
+  piBar();
   for (let i = 0; i < LANES; i++) newRelease(i);
   measure(); // after the lanes have content: filling them shrinks the inbox
   $('#start-screen').classList.add('hidden');

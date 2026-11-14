@@ -254,8 +254,8 @@ body.hurt #game { animation: hurt .35s; }
 @keyframes pagein { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
 .page h1, .page h2, .page .sub { text-align: center; }
 .page h2 { margin-bottom: 4px; }
-.icon-rules li { display: grid; grid-template-columns: 28px 1fr; gap: 6px; align-items: start; }
-.ri { font-size: 18px; line-height: 1.1; text-align: center; }
+.icon-rules li { position: relative; padding-left: 16px; }
+.icon-rules li::before { content: ""; position: absolute; left: 3px; top: .55em; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 .neg { color: var(--bad); white-space: nowrap; }
 .note {
   margin-top: 4px; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.4;
@@ -295,3 +295,26 @@ body.hurt #game { animation: hurt .35s; }
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 16px; }
 .stats div { background: var(--panel2); border-radius: 10px; padding: 8px; font-size: 12px; color: var(--muted); }
 .stats b { display: block; font-size: 20px; color: var(--text); }
+
+/* PI planning: candy hunt, then calm planning */
+#pi {
+  position: absolute; left: 6px; right: 6px; top: 4px; z-index: 12; pointer-events: none;
+  display: flex; align-items: center; justify-content: center; gap: 8px; padding: 5px 10px; border-radius: 10px;
+  background: rgba(40, 30, 8, .9); border: 1px solid var(--warn); color: var(--warn); font-size: 13px; font-weight: 800;
+}
+#pi.hidden { display: none; }
+#pi.plan { justify-content: space-between; background: rgba(8, 36, 28, .92); border-color: var(--good); color: var(--good); }
+#pi button {
+  pointer-events: auto; border: 0; border-radius: 8px; padding: 7px 10px;
+  background: var(--good); color: #04101f; font: inherit; font-weight: 900;
+}
+#inbox.pi-hunt .card { opacity: .2; pointer-events: none; }
+.candy {
+  position: absolute; left: 0; top: 0; z-index: 11; width: 46px; height: 46px; padding: 0;
+  border: 0; background: none; font-size: 34px; line-height: 46px; touch-action: none;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .6));
+}
+.candy.caught { animation: candy .3s ease-out forwards; pointer-events: none; }
+@keyframes candy { to { opacity: 0; scale: 1.8; } }
+.card.type-feature { background: color-mix(in srgb, var(--warn) 14%, var(--panel2)); }
+body.pi .deploy i::after { animation-play-state: paused; }
