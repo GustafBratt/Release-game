@@ -14,7 +14,7 @@ const TYPES = {
   sec: { icon: '🔒', size: 1, points: 250 },
   db: { icon: '🗄️', size: 2, points: 150 },
   api: { icon: '🔌', size: 1, points: 120 },
-  feature: { icon: '✨', size: 1, points: 200 }, // only from PI planning
+  story: { icon: '✨', size: 1, points: 200 }, // only from PI planning
 };
 
 const TITLES = {
@@ -23,7 +23,7 @@ const TITLES = {
     'Vit text på vitt', 'Timeout vid inloggning', 'Off-by-one i listan', 'Fel tidszon', 'Emoji kraschar appen'],
   sec: ['XSS i kommentarer', 'SQL-injektion', 'Läckt API-nyckel', 'CVE i beroende', 'Öppen redirect',
     'Svag lösenordshash', 'CSRF i formulär', 'Admin utan inloggning'],
-  feature: ['Mörkt läge', 'Önskelista', 'Push-notiser', 'Spara sökningar', 'Betyg på varor', 'Dela varukorg',
+  story: ['Mörkt läge', 'Önskelista', 'Push-notiser', 'Spara sökningar', 'Betyg på varor', 'Dela varukorg',
     'Inloggning med passkey', 'Snabbköp', 'Ny startsida', 'Presentkort', 'Orderhistorik', 'Rekommendationer'],
   db: ['Nytt index', 'Ny kolumn', 'Byt kolumntyp', 'Ny tabell', 'Datamigrering', 'Dela upp tabell', 'Ta bort kolumn'],
 };
@@ -40,7 +40,7 @@ const FORCE_SLOTS = 8;       // a release this overfull gets deployed by someone
 const CARD_H = 62;
 // PI planning: after every third sprint the game stops for a little platform level, then calm planning.
 const PI_EVERY = 3;
-const PI_CANDIES = 8;        // candies in the level; each one collected becomes a feature
+const PI_CANDIES = 8;        // candies in the level; each one collected becomes a story
 const PI_SPEED = 165;        // the avatar runs by itself, px/s
 const PI_GRAV = 1700;        // px/s²
 const PI_JUMP = 560;         // jump speed, px/s (about 90 px high; a double jump about doubles it)
@@ -1000,7 +1000,7 @@ function update(dt) {
 }
 
 // ---------- PI planning ----------
-// Everything else stands still: no spawns, no falling, no deadlines. G.t doesn't move either, so the features'
+// Everything else stands still: no spawns, no falling, no deadlines. G.t doesn't move either, so the stories'
 // lead time only starts counting when the sprint does. Deploys do run to the end (a queued release too),
 // so the planning starts with lanes to fill.
 
@@ -1254,15 +1254,15 @@ function piUpdate(dt) {
   if (G.pi && G.pi.phase === 'hunt') piDraw();
 }
 
-// The level is over: every candy collected becomes a feature, laid out at the top of the radar (where there's room).
+// The level is over: every candy collected becomes a story, laid out at the top of the radar (where there's room).
 function endHunt() {
   const p = G.pi;
   p.phase = 'plan';
   inboxEl.classList.remove('pi-hunt');
   piCanvas.classList.add('hidden');
-  for (let i = 0; i < p.caught; i++) placeFree(spawnCard('feature', { quiet: true }));
-  if (p.caught) { toast(`✨ ${p.caught} nya features att planera`, 'good'); sfx.resolved(); }
-  else toast('Inga godisar, inga features. Planera det du har.', '');
+  for (let i = 0; i < p.caught; i++) placeFree(spawnCard('story', { quiet: true }));
+  if (p.caught) { toast(`✨ ${p.caught} ${p.caught === 1 ? 'ny story' : 'nya stories'} att planera`, 'good'); sfx.resolved(); }
+  else toast('Inga godisar, inga stories. Planera det du har.', '');
   sfx.sprint();
   piBar();
 }

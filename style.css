@@ -312,4 +312,4 @@ body.hurt #game { animation: hurt .35s; }
   background: var(--good); color: #04101f; font: inherit; font-weight: 900;
 }
 #inbox.pi-hunt .card { opacity: .2; pointer-events: none; }
-.card.type-feature { background: color-mix(in srgb, var(--warn) 14%, var(--panel2)); }
+.card.type-story { background: color-mix(in srgb, var(--warn) 14%, var(--panel2)); }
