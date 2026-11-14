@@ -313,12 +313,16 @@ function warm(calm, normal) {
   return calm + (normal - calm) * k;
 }
 // After the warm-up the pace tightens slowly: the floors are reached only after 7–10 minutes.
+// Sprint 7 brings bigger API changes right after a PI planning, so the pace holds still for that sprint
+// (at the level sprint 6 ended on) and picks up again from sprint 8.
+const PACE_HOLD_FROM = (UNLOCK.apiBig - 1) * SPRINT_LEN;
+function paceT() { return G.t < PACE_HOLD_FROM ? G.t : Math.max(PACE_HOLD_FROM, G.t - SPRINT_LEN); }
 function fallTime() {
-  const normal = Math.max(10, 26 - Math.max(0, G.t - WARMUP) * 0.03);
+  const normal = Math.max(10, 26 - Math.max(0, paceT() - WARMUP) * 0.03);
   return G.t < WARMUP ? warm(34, normal) : normal;
 }
 function spawnInterval() {
-  const normal = Math.max(1.3, 4.2 - Math.max(0, G.t - WARMUP) * 0.008);
+  const normal = Math.max(1.3, 4.2 - Math.max(0, paceT() - WARMUP) * 0.008);
   return G.t < WARMUP ? warm(7, normal) : normal;
 }
 
@@ -376,6 +380,7 @@ function spawnCard(type, opts = {}) {
 function groupSize() {
   const r = Math.random();
   if (!unlocked('apiBig')) return 2;
+  if (G.sprint === UNLOCK.apiBig) return r < 0.6 ? 2 : 3; // 4 services only from the sprint after
   return r < 0.55 ? 2 : r < 0.87 ? 3 : 4;
 }
 
