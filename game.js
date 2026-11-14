@@ -1016,7 +1016,7 @@ function startPI() {
   const H = L.inboxH;
   G.pi = {
     phase: 'hunt', caught: 0, time: 0, H, level: buildLevel(H),
-    av: { x: 40, y: H - 34, vy: 0, onGround: true, jumps: 0, hold: false, squash: 0, blink: 0 },
+    av: { x: 40, y: H - 34, vy: 0, onGround: true, jumps: 0, hold: false, squash: 0 },
   };
   inboxEl.classList.add('pi-hunt');
   piCanvas.classList.remove('hidden');
@@ -1057,7 +1057,7 @@ function buildLevel(H) {
     const emoji = pick(CANDY);
     if (kind === 'gap') {
       // A candy in the arc over a gap.
-      const gap = rand(60, 90);
+      const gap = rand(48, 72); // a full jump clears about 105 px
       candies.push({ x: x + gap / 2, y: hi(rand(80, 100)), emoji });
       x += gap;
       const w = rand(170, 250);
@@ -1080,7 +1080,7 @@ function buildLevel(H) {
       candies.push({ x: x + w / 2, y: hi(rand(50, 80)), emoji });
       x += w;
     }
-    if (kind !== 'gap' && Math.random() < 0.55) x += rand(50, 80); // a gap to jump
+    if (kind !== 'gap' && Math.random() < 0.55) x += rand(40, 62); // a gap to jump
   }
   plats.push({ x, w: 600, y: ground, kind: 'floor' });
   return { plats, candies, end: x + 160, ground };
@@ -1089,7 +1089,7 @@ function buildLevel(H) {
 function piPress(down) {
   const a = G.pi.av;
   a.hold = down;
-  if (!down || a.blink > 0) return;
+  if (!down) return;
   if (a.onGround || a.jumps < 2) {
     a.vy = -PI_JUMP * (a.onGround ? 1 : 0.92);
     a.jumps = a.onGround ? 1 : a.jumps + 1;
@@ -1102,7 +1102,6 @@ function piPhysics(dt) {
   const p = G.pi, a = p.av, lv = p.level;
   p.time += dt;
   a.squash = Math.max(0, a.squash - dt);
-  if (a.blink > 0) a.blink -= dt;
   a.x += PI_SPEED * dt;
   const prevY = a.y;
   // Let go early and the jump ends lower.
@@ -1129,13 +1128,8 @@ function piPhysics(dt) {
     }
     if (k.pop > 0) k.pop -= dt;
   }
-  // Fell into a gap: back on the next desk, a little later. The candies you skipped are gone.
-  if (a.y > p.H + 40) {
-    const pl = lv.plats.find((q) => q.kind === 'floor' && q.x + q.w > a.x + 30);
-    a.x = Math.max(pl.x + 20, a.x);
-    a.y = pl.y; a.vy = 0; a.onGround = true; a.jumps = 0; a.blink = 0.9;
-    sfx.slip();
-  }
+  // Fell into a gap: the level is over, and you keep the candies you have.
+  if (a.y > p.H + 40) { p.fell = true; sfx.slip(); endHunt(); return; }
   if (a.x >= lv.end) endHunt();
 }
 
@@ -1208,7 +1202,7 @@ function piDraw() {
     g.font = '24px system-ui, sans-serif';
     g.fillText(k.emoji, x, k.y + Math.sin(p.time * 4 + k.x) * 3);
   }
-  if (!(a.blink > 0 && Math.floor(a.blink * 10) % 2)) drawAvatar(g, a.x - cam, a.y, a, p.time);
+  drawAvatar(g, a.x - cam, a.y, a, p.time);
 }
 
 // A round little developer in a hoodie and headphones. No gender cues on purpose.
@@ -1269,7 +1263,8 @@ function endHunt() {
   for (const s of G.scheduled.splice(0)) s.fn();
   for (const c of G.cards.values()) if (c.id >= firstNew && c.where === 'inbox') placeFree(c);
   for (let i = 0; i < p.caught; i++) placeFree(spawnCard('story', { quiet: true }));
-  if (p.caught) { toast(`✨ ${p.caught} ${p.caught === 1 ? 'ny story' : 'nya stories'}. Planera i lugn och ro.`, 'good'); sfx.resolved(); }
+  if (p.fell) toast('🕳️ Ramlade ner i ett hål! Banan är slut.', 'warn');
+  if (p.caught) { toast(`✨ ${p.caught} ${p.caught === 1 ? 'ny story' : 'nya stories'}. Planera i lugn och ro.`, 'good'); if (!p.fell) sfx.resolved(); }
   else toast('Inga godisar, inga stories. Planera det du har.', '');
   sfx.sprint();
   piBar();
