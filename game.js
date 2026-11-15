@@ -41,9 +41,10 @@ const CARD_H = 62;
 // PI planning: after every third sprint the game stops for a little platform level, then calm planning.
 const PI_EVERY = 3;
 const PI_CANDIES = 8;        // candies in the level; each one collected becomes a story
-const PI_SPEED = 165;        // the avatar runs by itself, px/s
-const PI_GRAV = 1700;        // px/s²
-const PI_JUMP = 560;         // jump speed, px/s (about 90 px high; a double jump about doubles it)
+const PI_SPEED0 = 260;       // the avatar runs by itself, px/s, at the start of the level …
+const PI_SPEED1 = 400;       // … and speeds up to this by the finish
+const PI_GRAV = 2600;        // px/s²
+const PI_JUMP = 760;         // jump speed, px/s (about 110 px high, 0.6 s in the air; a double jump nearly doubles it)
 const CANDY = ['🍬', '🍭', '🍫', '🍩', '🧁', '🍪'];
 const NOTE_COLORS = ['#fde68a', '#f9a8d4', '#93c5fd', '#86efac'];
 const TOP = 22;              // space for the inbox label
@@ -190,6 +191,40 @@ function thud(vol = 0.2, o = {}) {
   noise(0.3, vol * 0.3, { ...o, filter: 'lowpass', freq: 500 });
 }
 
+// ---- Chip instruments for the PI level: pulse waves, a triangle bass and noise drums ----
+
+const pulseWaves = {};
+function pulseWave(duty) {
+  if (!pulseWaves[duty]) {
+    const n = 32, re = new Float32Array(n), im = new Float32Array(n);
+    for (let k = 1; k < n; k++) re[k] = (2 / (k * Math.PI)) * Math.sin(k * Math.PI * duty);
+    pulseWaves[duty] = AC.createPeriodicWave(re, im);
+  }
+  return pulseWaves[duty];
+}
+
+// A flat, 8-bit style note: full volume, then a quick release.
+function chip(freq, dur, vol, o = {}) {
+  if (!AC || soundMode === 'off') return;
+  try {
+    const t0 = o.at ?? AC.currentTime + (o.delay || 0);
+    const osc = AC.createOscillator();
+    if (o.wave === 'triangle') osc.type = 'triangle';
+    else osc.setPeriodicWave(pulseWave(o.duty || 0.5));
+    osc.frequency.setValueAtTime(freq, t0);
+    if (o.slideTo) osc.frequency.exponentialRampToValueAtTime(o.slideTo, t0 + dur);
+    const g = AC.createGain();
+    g.gain.setValueAtTime(vol, t0);
+    g.gain.setValueAtTime(vol, t0 + dur * 0.75);
+    g.gain.linearRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g).connect(o.bus || master);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+  } catch { /* ignore */ }
+}
+
+const midi = (n) => 440 * 2 ** ((n - 69) / 12);
+
 function seq(freqs, step, fn) { freqs.forEach((f, i) => fn(f, i * step)); }
 
 const PENTA = [523.25, 587.33, 659.25, 783.99, 880, 1046.5]; // C major pentatonic
@@ -214,6 +249,10 @@ const sfx = {
   gameOver: () => { pad([220, 261.63, 329.63], 3, 0.03, 900); seq([659.25, 587.33, 523.25, 440, 329.63], 0.35, (f, d) => bell(f, 1.2, 0.045, { delay: d })); },
   click: () => wood(1900, 0.045),
   slip: () => { tone(620, 0.2, 'sine', 0.07, { slideTo: 240 }); wood(900, 0.04, { delay: 0.12 }); },
+  // 8-bit effects for the PI level.
+  chipJump: (double) => chip(double ? 520 : 330, 0.12, 0.05, { duty: 0.25, slideTo: double ? 1300 : 900 }),
+  chipCandy: (n) => seq([0, 4, 7, 12].map((i) => midi(76 + ((n - 1) % 5) * 2 + i)), 0.04, (f, d) => chip(f, 0.06, 0.045, { duty: 0.125, delay: d })),
+  chipFall: () => chip(700, 0.5, 0.06, { duty: 0.5, slideTo: 90 }),
 };
 
 // Background music: lo-fi chords, soft drums and a wandering mallet melody.
@@ -244,8 +283,46 @@ function playStep(s, t, sd) {
   if (G.urgent && s % 4 === 0) tone(chord[0] / 2, 0.2, 'triangle', 0.06, { at: t, bus });
 }
 
+// Chiptune for the PI level: an original 4-bar loop over C–Am–F–G, at 16th notes.
+const CHIP_LEAD = [
+  [72, 0, 76, 0, 79, 0, 76, 0, 84, 0, 79, 0, 76, 0, 79, 81],
+  [81, 0, 79, 0, 76, 0, 72, 0, 76, 0, 0, 0, 74, 0, 72, 0],
+  [77, 0, 81, 0, 84, 0, 81, 0, 77, 0, 79, 0, 81, 0, 84, 0],
+  [83, 0, 0, 0, 79, 0, 74, 0, 79, 0, 83, 0, 86, 0, 0, 0],
+];
+const CHIP_CHORDS = [[48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50]];
+
+function playChipStep(s, t, sd) {
+  const bar = music.bar % 4;
+  const bus = musicBus;
+  const chord = CHIP_CHORDS[bar];
+  const n = CHIP_LEAD[bar][s];
+  if (n) chip(midi(n), sd * 1.8, 0.028, { at: t, duty: 0.25, bus });
+  // Fast arpeggio an octave up, quiet, every 16th.
+  chip(midi(chord[s % 3] + 24), sd * 0.9, 0.012, { at: t, duty: 0.125, bus });
+  // Triangle bass: root and octave on the 8ths.
+  if (s % 2 === 0) chip(midi(chord[0] - 12 + (s % 4 === 2 ? 12 : 0)), sd * 1.6, 0.11, { at: t, wave: 'triangle', bus });
+  // Drums: kick on 1 and 3, noise snare on 2 and 4, a hat on the off-beats.
+  if (s === 0 || s === 8 || s === 10) chip(160, 0.09, 0.2, { at: t, wave: 'triangle', slideTo: 45, bus });
+  if (s === 4 || s === 12) noise(0.1, 0.07, { at: t, filter: 'highpass', freq: 1800, bus });
+  if (s % 2 === 1) noise(0.025, 0.025, { at: t, freq: 9000, bus });
+}
+
 function musicTick() {
   if (!AC || soundMode !== 'all' || !G || !G.running || G.paused) return;
+  if (G.pi && G.pi.phase === 'hunt') {
+    // Speeds up with the level, like the run itself.
+    const f = G.pi.av.x / G.pi.level.end;
+    const sd = 60 / (150 + 30 * Math.max(0, Math.min(1, f))) / 4;
+    if (music.next < AC.currentTime) music.next = AC.currentTime + 0.05;
+    while (music.next < AC.currentTime + 0.15) {
+      playChipStep(music.step, music.next, sd);
+      music.next += sd;
+      music.step = (music.step + 1) % 16;
+      if (music.step === 0) music.bar++;
+    }
+    return;
+  }
   const bpm = Math.min(124, 78 + (G.sprint - 1) * 7 + (G.urgent ? 8 : 0));
   const sd = 60 / bpm / 2;
   if (music.next < AC.currentTime) music.next = AC.currentTime + 0.05;
@@ -1035,6 +1112,8 @@ const piCanvas = $('#pi-canvas');
 const pctx = piCanvas.getContext('2d');
 
 function startPI() {
+  music.step = 0;
+  music.bar = 0;
   cancelDrag();
   select(null);
   measure();
@@ -1071,44 +1150,47 @@ function piBar() {
 
 // Platforms are one-way: you land on them from above. A candy sits on each segment, some easy, some only
 // reachable from a sticky note or with a double jump.
+function piSpeedAt(f) { return PI_SPEED0 + (PI_SPEED1 - PI_SPEED0) * Math.max(0, Math.min(1, f)); }
+
 function buildLevel(H) {
   const ground = H - 34;
   const hi = (n) => Math.max(64, ground - n); // keep things below the PI bar on short screens
-  const plats = [{ x: -300, w: 620, y: ground, kind: 'floor' }];
+  const plats = [{ x: -300, w: 300 + PI_SPEED0 * 1.8, y: ground, kind: 'floor' }];
   const candies = [];
-  let x = 320;
+  let x = PI_SPEED0 * 1.8;
   for (let i = 0; i < PI_CANDIES; i++) {
+    const v = piSpeedAt(i / PI_CANDIES); // roughly how fast you'll be running here
     const kind = i === 0 ? 'air' : pick(['gap', 'note', 'high', 'air']);
     const emoji = pick(CANDY);
     if (kind === 'gap') {
       // A candy in the arc over a gap.
-      const gap = rand(48, 72); // a full jump clears about 105 px
-      candies.push({ x: x + gap / 2, y: hi(rand(80, 100)), emoji });
+      const gap = v * rand(0.2, 0.32);
+      candies.push({ x: x + gap / 2, y: hi(rand(85, 105)), emoji });
       x += gap;
-      const w = rand(170, 250);
+      const w = v * rand(0.7, 1);
       plats.push({ x, w, y: ground, kind: 'floor' });
       x += w;
     } else if (kind === 'note' || kind === 'high') {
       // A sticky note above the desk: a low one you can jump onto, or a high one that needs a double jump.
-      const w = rand(280, 340);
+      const w = v * rand(1.1, 1.4);
       plats.push({ x, w, y: ground, kind: 'floor' });
-      const nw = rand(80, 105);
-      const ny = hi(kind === 'note' ? rand(70, 85) : rand(130, 150));
-      const nx = x + rand(70, w - nw - 50);
+      const nw = rand(95, 125);
+      const ny = hi(kind === 'note' ? rand(70, 90) : rand(150, 170));
+      const nx = x + w * rand(0.3, 0.45);
       plats.push({ x: nx, w: nw, y: ny, kind: 'note', color: pick(NOTE_COLORS), tilt: rand(-0.05, 0.05) });
       candies.push({ x: nx + nw / 2, y: ny - 26, emoji });
       x += w;
     } else {
       // A candy floating above the desk: one jump.
-      const w = rand(220, 290);
+      const w = v * rand(0.9, 1.1);
       plats.push({ x, w, y: ground, kind: 'floor' });
-      candies.push({ x: x + w / 2, y: hi(rand(50, 80)), emoji });
+      candies.push({ x: x + w / 2, y: hi(rand(55, 90)), emoji });
       x += w;
     }
-    if (kind !== 'gap' && Math.random() < 0.55) x += rand(40, 62); // a gap to jump
+    if (kind !== 'gap' && Math.random() < 0.6) x += v * rand(0.18, 0.28); // a gap to jump
   }
-  plats.push({ x, w: 600, y: ground, kind: 'floor' });
-  return { plats, candies, end: x + 160, ground };
+  plats.push({ x, w: 900, y: ground, kind: 'floor' });
+  return { plats, candies, end: x + 200, ground };
 }
 
 function piPress(down) {
@@ -1119,7 +1201,7 @@ function piPress(down) {
     a.vy = -PI_JUMP * (a.onGround ? 1 : 0.92);
     a.jumps = a.onGround ? 1 : a.jumps + 1;
     a.onGround = false;
-    wood(a.jumps > 1 ? 2600 : 2000, 0.05);
+    sfx.chipJump(a.jumps > 1);
   }
 }
 
@@ -1127,7 +1209,7 @@ function piPhysics(dt) {
   const p = G.pi, a = p.av, lv = p.level;
   p.time += dt;
   a.squash = Math.max(0, a.squash - dt);
-  a.x += PI_SPEED * dt;
+  a.x += piSpeedAt(a.x / lv.end) * dt;
   const prevY = a.y;
   // Let go early and the jump ends lower.
   a.vy += PI_GRAV * dt * (a.vy < 0 && !a.hold ? 2.4 : 1);
@@ -1138,7 +1220,7 @@ function piPhysics(dt) {
     for (const pl of lv.plats) {
       if (a.x + 7 > pl.x && a.x - 7 < pl.x + pl.w && prevY <= pl.y + 1 && a.y >= pl.y) {
         a.y = pl.y; a.vy = 0; a.onGround = true; a.jumps = 0;
-        if (!was) { a.squash = 0.12; wood(900, 0.03); }
+        if (!was) a.squash = 0.12;
         break;
       }
     }
@@ -1148,13 +1230,13 @@ function piPhysics(dt) {
       k.got = true;
       k.pop = 0.35;
       p.caught++;
-      bell(PENTA[(p.caught - 1) % PENTA.length] * 2, 0.5, 0.05);
+      sfx.chipCandy(p.caught);
       piBar();
     }
     if (k.pop > 0) k.pop -= dt;
   }
   // Fell into a gap: the level is over, and you keep the candies you have.
-  if (a.y > p.H + 40) { p.fell = true; sfx.slip(); endHunt(); return; }
+  if (a.y > p.H + 40) { p.fell = true; sfx.chipFall(); endHunt(); return; }
   if (a.x >= lv.end) endHunt();
 }
 
@@ -1172,7 +1254,7 @@ function piDraw() {
   sky.addColorStop(1, '#1b2850');
   g.fillStyle = sky;
   g.fillRect(0, 0, W, H);
-  const cam = a.x - W * 0.28;
+  const cam = a.x - W * 0.22;
   // The program board in the background: faint columns, scrolling slower.
   g.strokeStyle = 'rgba(148, 163, 184, .08)';
   g.lineWidth = 1;
