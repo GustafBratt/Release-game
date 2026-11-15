@@ -372,7 +372,7 @@ function newGame() {
     cards: new Map(), releases: [], pairs: new Map(), scheduled: [],
     nextId: 1, nextRid: 1, nextVersion: 1, nextPair: 0, nextDbv: 41, pendingDbv: new Set(),
     spawnIn: 0.8, conflictIn: 8, sprint: 1,
-    shipped: 0, broken: 0, changes: 0, selected: null, seenTips: new Set(),
+    shipped: 0, broken: 0, changes: 0, selected: null, seenTips: new Set(), lastTip: -Infinity,
     dbProd: 40, // schema version in prod: the highest migration shipped (they ship in order)
     dbShown: false, // the top bar shows dbProd from the first migration shipped
     leadSum: 0, leadCount: 0, // lead time from radar to prod, over every change shipped
@@ -385,6 +385,18 @@ const SPRINT_LEN = 45;       // seconds per sprint
 // New kinds of changes arrive one sprint at a time, each with an info card the first time it shows up.
 const UNLOCK = { db: 2, sec: 3, dbOrder: 3, api: 4, deadline: 5, spont: 6, apiBig: 7 };
 function unlocked(key) { return G.sprint >= UNLOCK[key]; }
+// Info cards come at least TIP_GAP seconds apart: a new mechanic shows up for the first time only once that
+// much game time has passed since the last card (and after the card it builds on). Until then it waits.
+const TIP_GAP = 20;
+const TIP_AFTER = { dbOrder: 'db', apiBig: 'api' };
+function ready(key) {
+  if (!unlocked(key)) return false;
+  if (G.seenTips.has(key)) return true;
+  if (TIP_AFTER[key] && !G.seenTips.has(TIP_AFTER[key])) return false;
+  // PI planning has its own card and can't be moved, so don't introduce anything just before it either.
+  const nextPI = Math.ceil((G.t + 0.001) / (PI_EVERY * SPRINT_LEN)) * PI_EVERY * SPRINT_LEN;
+  return G.t - G.lastTip >= TIP_GAP && nextPI - G.t >= TIP_GAP;
+}
 const WARMUP = SPRINT_LEN;
 function warm(calm, normal) {
   const k = Math.min(1, G.t / WARMUP);
@@ -447,7 +459,7 @@ function spawnCard(type, opts = {}) {
   if (c.dbv !== null) G.pendingDbv.delete(c.dbv);
   // Deadlines belong to issues, not releases: security fixes always, and sometimes a customer is waiting.
   if (type === 'sec') c.dueLeft = SEC_DUE;
-  else if ((type === 'bug' || type === 'db') && unlocked('deadline') && Math.random() < 0.22) c.dueLeft = Math.round(rand(40, 60));
+  else if ((type === 'bug' || type === 'db') && ready('deadline') && Math.random() < 0.22) c.dueLeft = Math.round(rand(40, 60));
   G.cards.set(c.id, c);
   G.changes++;
   createCardEl(c);
@@ -462,7 +474,7 @@ function spawnCard(type, opts = {}) {
 // The first is the server (the API itself); the others are clients that must ship with it.
 function groupSize() {
   const r = Math.random();
-  if (!unlocked('apiBig')) return 2;
+  if (!ready('apiBig')) return 2;
   if (G.sprint === UNLOCK.apiBig) return r < 0.6 ? 2 : 3; // 4 services only from the sprint after
   return r < 0.55 ? 2 : r < 0.87 ? 3 : 4;
 }
@@ -470,12 +482,11 @@ function groupSize() {
 // Migration numbers are handed out in order, but sometimes the next one shows up before the
 // previous one: the skipped number is held back (G.pendingDbv) and arrives a few seconds later.
 function nextMigration() {
-  if (unlocked('dbOrder') && Math.random() < 0.35) {
+  if (ready('dbOrder') && Math.random() < 0.35) {
     const held = G.nextDbv;
     G.nextDbv += 2;
     G.pendingDbv.add(held);
     G.scheduled.push({ at: rand(2, 5), fn: () => spawnCard('db', { dbv: held }) });
-    tip('db'); // the first migration may be this one: explain migrations before explaining their order
     tip('dbOrder');
     return held + 1;
   }
@@ -510,9 +521,9 @@ function spawnApiGroup() {
 function spawnRandom() {
   const w = [
     ['bug', 45],
-    ['db', unlocked('db') ? 14 : 0],
-    ['sec', unlocked('sec') ? 11 : 0],
-    ['api', unlocked('api') ? 13 : 0],
+    ['db', ready('db') ? 14 : 0],
+    ['sec', ready('sec') ? 11 : 0],
+    ['api', ready('api') ? 13 : 0],
   ];
   let x = Math.random() * w.reduce((s, [, n]) => s + n, 0);
   for (const [type, n] of w) {
@@ -1059,7 +1070,9 @@ function update(dt) {
 
   if (unlocked('spont')) {
     G.conflictIn -= dt;
-    if (G.conflictIn <= 0) { G.conflictIn = rand(14, 26); spontaneousConflict(); }
+    if (G.conflictIn <= 0) {
+      if (ready('spont')) { G.conflictIn = rand(14, 26); spontaneousConflict(); } else G.conflictIn = 2;
+    }
   }
 
   // Cards fall in their columns and queue: a faster card stops behind a slower one instead of sliding over it.
@@ -1629,6 +1642,7 @@ function tip(key) {
 function showNextTip() {
   const key = tipQueue.shift();
   G.seenTips.add(key);
+  G.lastTip = G.t;
   tipOpen = true;
   G.paused = true;
   cancelDrag();
