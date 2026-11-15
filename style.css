@@ -307,12 +307,12 @@ body.hurt #game { animation: hurt .35s; }
 }
 #pi.hidden { display: none; }
 .pi-go {
-  flex: 1; height: 36px; border: 0; border-radius: 10px; padding: 0 10px;
-  background: var(--good); color: #04101f; font: inherit; font-size: 14px; font-weight: 900; white-space: nowrap;
+  height: 28px; border: 0; border-radius: 9px; padding: 0 14px; margin-bottom: 1px;
+  background: var(--good); color: #04101f; font: inherit; font-size: 13px; font-weight: 900; white-space: nowrap;
   box-shadow: 0 0 0 0 rgba(52, 211, 153, .6); animation: pigo 1.6s ease-out infinite;
 }
 @keyframes pigo { 70% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); } 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); } }
-.hidden.pi-go, #hud .sprint.hidden { display: none; }
+.hidden.pi-go, #sprint.hidden { display: none; }
 #inbox.pi-hunt .card { opacity: .2; pointer-events: none; }
 .card.type-story { background: color-mix(in srgb, var(--warn) 14%, var(--panel2)); }
 .sub .pair, .note .pair { font-size: 12px; padding: 1px 5px; }

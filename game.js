@@ -1139,7 +1139,7 @@ function piBar() {
   // so nothing covers the cards on the radar.
   piEl.classList.toggle('hidden', !p || plan);
   document.body.classList.toggle('pi', !!p);
-  $('#hud .sprint').classList.toggle('hidden', plan);
+  $('#sprint').classList.toggle('hidden', plan); // the button takes the sprint name's place; the schema version stays
   $('#pi-go').classList.toggle('hidden', !plan);
   if (!p) return;
   $('#pi-go').textContent = `▶ Starta sprint ${G.sprint}`;
