@@ -1271,8 +1271,8 @@ function endHunt() {
   for (const c of G.cards.values()) if (c.id >= firstNew && c.where === 'inbox') placeFree(c);
   for (let i = 0; i < p.caught; i++) placeFree(spawnCard('story', { quiet: true }));
   if (p.fell) toast('🕳️ Ramlade ner i ett hål! Banan är slut.', 'warn');
-  if (p.caught) { toast(`✨ ${p.caught} ${p.caught === 1 ? 'ny story' : 'nya stories'}. Planera i lugn och ro.`, 'good'); if (!p.fell) sfx.resolved(); }
-  else toast('Inga godisar, inga stories. Planera det du har.', '');
+  if (p.caught) { toast(`✨ ${p.caught} ${p.caught === 1 ? 'ny ändring' : 'nya ändringar'}. Planera i lugn och ro.`, 'good'); if (!p.fell) sfx.resolved(); }
+  else toast('Inga godisar, inga nya ändringar. Planera det du har.', '');
   sfx.sprint();
   piBar();
 }

@@ -46,7 +46,7 @@
             <li><span>Ändringar dyker upp på <b>radarn</b> och sjunker mot den röda linjen. <b>Dra</b> en ändring till en release, eller <b>tryck</b> på den och sedan på releasen.</span></li>
             <li><span>Releaser har inget datum. De går ut när du trycker <b>Släpp</b>, i nummerordning: den längst till vänster först. Det finns bara <b>en pipeline</b>, så en release i taget, och en deploy tar 4 s. Medan en deployas kan du köa nästa.</span></li>
             <li><span>Ändringar i samma release är <b>ihopmergade</b> och går inte att sära på. Tänk efter innan du lägger dem ihop.</span></li>
-            <li><span><b>Snabbhet ger poäng.</b> Ju kortare tid från radar till prod, desto mer är ändringen värd. En release kan ha max 4 stories.</span></li>
+            <li><span><b>Snabbhet ger poäng.</b> Ju kortare tid från radar till prod, desto mer är ändringen värd. En release kan ha max 4 ändringar.</span></li>
             <li><span>Vissa misstag är så allvarliga att det blir <b>game over</b>. Du får veta vilka när de dyker upp.</span></li>
           </ul>
         </section>
@@ -57,7 +57,7 @@
           <ul class="rules icon-rules">
             <li><span>Den hamnar i releasen <b>längst till vänster</b>, även om den redan är full.</span></li>
             <li><span>Den är <b>oplanerad och otestad</b> och ger bara halva poängen. Den kan också ställa till det: en konflikt, eller något värre.</span></li>
-            <li><span>Släpper du aldrig och releasen når 8 stories tröttnar chefen och deployar den själv.</span></li>
+            <li><span>Släpper du aldrig och releasen når 8 ändringar tröttnar chefen och deployar den själv.</span></li>
           </ul>
           <p class="note">Spelet börjar enkelt. Nya sorters ändringar dyker upp sprint för sprint, och du får ett infokort när något nytt händer.</p>
         </section>
@@ -81,7 +81,7 @@
 
         <section class="page" data-key="db">
           <h2>🗄️ Databasändringar</h2>
-          <p class="sub">En databasändring är en migrering av databasen. Den räknas som 2 stories och är värd 150 p.</p>
+          <p class="sub">En databasändring är en migrering av databasen. Den räknas som 2 ändringar och är värd 150 p.</p>
           <ul class="rules icon-rules">
             <li><span>Migreringarna är numrerade (<span class="dbv">V41</span>, <span class="dbv">V42</span> …) och måste ut i <b>nummerordning</b>.</span></li>
             <li><span>Ligger V42 i en release medan V41 inte är i prod varnar releasen med ⛔ och en röd Släpp-knapp.</span></li>
@@ -181,7 +181,7 @@
           <p class="sub">Var tredje sprint samlas hela tåget och planerar nästa period. Någon har gömt godis på planeringstavlan.</p>
           <ul class="rules icon-rules">
             <li><span>Din figur springer av sig själv över skrivborden. <b>Tryck</b> var som helst för att hoppa, tryck igen i luften för <b>dubbelhopp</b>, och håll in för att hoppa högre.</span></li>
-            <li><span>Hoppa upp på post-it-lapparna och över hålen: ramlar du ner i ett hål är banan slut. Varje godis du tar blir en ny <b>story</b> ✨, värd 200 p.</span></li>
+            <li><span>Hoppa upp på post-it-lapparna och över hålen: ramlar du ner i ett hål är banan slut. Varje godis du tar blir en ny <b>ändring</b> ✨, värd 200 p.</span></li>
             <li><span>Sen står allt still. Lägg in dem i releaserna <b>i lugn och ro</b>: ingen klocka går, och inget faller.</span></li>
             <li><span>Allt som var på väg dyker upp nu, och du kan <b>planera om</b> fritt: under planeringen går även ihopmergade ändringar att flytta.</span></li>
             <li><span>Tryck <b>Starta sprint</b> när du är klar. Det som inte är planerat börjar falla igen.</span></li>
