@@ -382,9 +382,24 @@ function newGame() {
 
 // Sprint 1 is a warm-up: it eases from a calm pace down to the normal curve at 60 s.
 const SPRINT_LEN = 45;       // seconds per sprint
-// New kinds of changes arrive one sprint at a time, each with an info card the first time it shows up.
-const UNLOCK = { db: 2, sec: 3, dbOrder: 3, api: 4, deadline: 5, spont: 6, apiBig: 7 };
-function unlocked(key) { return G.sprint >= UNLOCK[key]; }
+// New kinds of changes are unlocked by points (stars), each with an info card the first time it shows up.
+// In order; the top bar shows the next one. The score never goes down, so an unlock stays unlocked.
+const UNLOCK = { db: 2000, sec: 3500, dbOrder: 5000, api: 7000, deadline: 10000, spont: 13000, apiBig: 17000, api4: 22000 };
+const UNLOCK_ICON = { db: '🗄️', sec: '🔒', dbOrder: '🔢', api: '🔌', deadline: '⏰', spont: '🔀', apiBig: '🔌×3', api4: '🔌×4' };
+function unlocked(key) { return G.score >= UNLOCK[key]; }
+// Passing a threshold brings the new kind right away (as soon as its info card may come), not by chance later.
+function introduceNext() {
+  const key = Object.keys(UNLOCK).find((k) => k !== 'api4' && !G.seenTips.has(k));
+  if (!key || !ready(key)) return;
+  if (key === 'db') spawnCard('db');
+  else if (key === 'sec') spawnCard('sec');
+  else if (key === 'dbOrder') { G.forceSkip = true; spawnCard('db'); }
+  else if (key === 'api') spawnApiGroup();
+  else if (key === 'apiBig') { G.forceGroup = 3; spawnApiGroup(); }
+  else if (key === 'deadline') spawnCard('bug', { due: true });
+  else if (key === 'spont') spontaneousConflict();
+}
+function nextUnlock() { return Object.keys(UNLOCK).find((k) => G.score < UNLOCK[k]) || null; }
 // Info cards come at least TIP_GAP seconds apart: a new mechanic shows up for the first time only once that
 // much game time has passed since the last card (and after the card it builds on). Until then it waits.
 const TIP_GAP = 20;
@@ -392,9 +407,13 @@ const TIP_AFTER = { dbOrder: 'db', apiBig: 'api' };
 function ready(key) {
   if (!unlocked(key)) return false;
   if (G.seenTips.has(key)) return true;
+  // New kinds come in the order of UNLOCK.
+  const keys = Object.keys(UNLOCK);
+  if (keys.slice(0, keys.indexOf(key)).some((k) => k !== 'api4' && !G.seenTips.has(k))) return false;
   if (TIP_AFTER[key] && !G.seenTips.has(TIP_AFTER[key])) return false;
   // PI planning has its own card and can't be moved, so don't introduce anything just before it either.
-  const nextPI = Math.ceil((G.t + 0.001) / (PI_EVERY * SPRINT_LEN)) * PI_EVERY * SPRINT_LEN;
+  const period = PI_EVERY * SPRINT_LEN;
+  const nextPI = (Math.floor(G.t / period) + 1) * period;
   return G.t - G.lastTip >= TIP_GAP && nextPI - G.t >= TIP_GAP;
 }
 const WARMUP = SPRINT_LEN;
@@ -405,7 +424,7 @@ function warm(calm, normal) {
 // After the warm-up the pace tightens slowly: the floors are reached only after 7–10 minutes.
 // Sprint 7 brings bigger API changes right after a PI planning, so the pace holds still for that sprint
 // (at the level sprint 6 ended on) and picks up again from sprint 8.
-const PACE_HOLD_FROM = (UNLOCK.apiBig - 1) * SPRINT_LEN;
+const PACE_HOLD_FROM = 6 * SPRINT_LEN;
 function paceT() { return G.t < PACE_HOLD_FROM ? G.t : Math.max(PACE_HOLD_FROM, G.t - SPRINT_LEN); }
 function fallTime() {
   const normal = Math.max(10, 26 - Math.max(0, paceT() - WARMUP) * 0.03);
@@ -459,7 +478,7 @@ function spawnCard(type, opts = {}) {
   if (c.dbv !== null) G.pendingDbv.delete(c.dbv);
   // Deadlines belong to issues, not releases: security fixes always, and sometimes a customer is waiting.
   if (type === 'sec') c.dueLeft = SEC_DUE;
-  else if ((type === 'bug' || type === 'db') && ready('deadline') && Math.random() < 0.22) c.dueLeft = Math.round(rand(40, 60));
+  else if (opts.due || ((type === 'bug' || type === 'db') && ready('deadline') && Math.random() < 0.22)) c.dueLeft = Math.round(rand(40, 60));
   G.cards.set(c.id, c);
   G.changes++;
   createCardEl(c);
@@ -473,16 +492,18 @@ function spawnCard(type, opts = {}) {
 // An API change touches 2–4 services: one card per service, sharing a letter.
 // The first is the server (the API itself); the others are clients that must ship with it.
 function groupSize() {
+  if (G.forceGroup) { const n = G.forceGroup; G.forceGroup = 0; return n; }
   const r = Math.random();
   if (!ready('apiBig')) return 2;
-  if (G.sprint === UNLOCK.apiBig) return r < 0.6 ? 2 : 3; // 4 services only from the sprint after
+  if (!unlocked('api4')) return r < 0.6 ? 2 : 3; // 4 services only from the next threshold
   return r < 0.55 ? 2 : r < 0.87 ? 3 : 4;
 }
 
 // Migration numbers are handed out in order, but sometimes the next one shows up before the
 // previous one: the skipped number is held back (G.pendingDbv) and arrives a few seconds later.
 function nextMigration() {
-  if (ready('dbOrder') && Math.random() < 0.35) {
+  if (ready('dbOrder') && (G.forceSkip || Math.random() < 0.35)) {
+    G.forceSkip = false;
     const held = G.nextDbv;
     G.nextDbv += 2;
     G.pendingDbv.add(held);
@@ -1025,6 +1046,10 @@ function render() {
   const label = hidden ? `Inkommande ändringar · ${fmt(hidden)} till på väg in` : 'Inkommande ändringar';
   if (inboxLabel.textContent !== label) { inboxLabel.textContent = label; inboxLabel.classList.toggle('queued', hidden > 0); }
   $('#score').textContent = fmt(G.score);
+  const nk = nextUnlock();
+  const goal = nk ? `🔓 ${UNLOCK_ICON[nk]} vid ${fmt(UNLOCK[nk])}` : '';
+  const goalEl = $('#goal');
+  if (goalEl.textContent !== goal) goalEl.textContent = goal;
   $('#sprint').textContent = G.pi ? 'PI planning' : `Sprint ${G.sprint}`;
   const dbEl = $('#dbprod');
   dbEl.classList.toggle('hidden', !G.dbShown);
@@ -1061,6 +1086,7 @@ function update(dt) {
   }
 
   G.spawnIn -= dt;
+  introduceNext();
   if (G.spawnIn <= 0) { spawnRandom(); G.spawnIn = spawnInterval() * rand(0.7, 1.3); }
 
   for (const s of [...G.scheduled]) {

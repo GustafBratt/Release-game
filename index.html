@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#0b1020">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Release Tycoon</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
   <div id="game">
     <header id="hud">
-      <div class="score">⭐ <span id="score">0</span></div>
+      <div class="score"><span>⭐ <span id="score">0</span></span><span class="goal" id="goal" title="Nästa nya sorts ändring"></span></div>
       <div class="sprint"><span id="sprint">Sprint 1</span><button class="pi-go hidden" id="pi-go" data-pigo>▶ Starta sprint</button><span class="dbprod hidden" id="dbprod" title="Databasschemat i produktion"></span></div>
       <button class="icon-btn" id="mute-btn" aria-label="Ljud">🔊</button>
       <button class="icon-btn" id="pause-btn" aria-label="Paus">⏸</button>
@@ -58,7 +58,7 @@
             <li><span>Den är <b>oplanerad och otestad</b> och ger bara halva poängen. Den kan också ställa till det: en konflikt, eller något värre.</span></li>
             <li><span>Släpper du aldrig och releasen når 8 ändringar tröttnar chefen och deployar den själv.</span></li>
           </ul>
-          <p class="note">Spelet börjar enkelt. Nya sorters ändringar dyker upp sprint för sprint, och du får ett infokort när något nytt händer.</p>
+          <p class="note">Spelet börjar enkelt. Ju fler ⭐ du samlar, desto fler sorters ändringar dyker upp. Nästa mål syns under poängen, och du får ett infokort när något nytt händer.</p>
         </section>
 
         <section class="page" data-key="conflict">
@@ -214,6 +214,6 @@
       </div>
     </div>
   </div>
-  <script src="game.js"></script>
+  <script src="game.js?v=2"></script>
 </body>
 </html>

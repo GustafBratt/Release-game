@@ -57,7 +57,9 @@ body.hurt #game { animation: hurt .35s; }
 
 /* HUD */
 #hud { flex: none; height: 46px; display: flex; align-items: center; gap: 8px; }
-.score { font-weight: 800; min-width: 74px; font-variant-numeric: tabular-nums; }
+.score { font-weight: 800; min-width: 74px; font-variant-numeric: tabular-nums; display: flex; flex-direction: column; line-height: 1.2; white-space: nowrap; }
+.goal { font-size: 10px; font-weight: 700; color: var(--muted); }
+.goal:empty { display: none; }
 .sprint { flex: 1; display: flex; flex-direction: column; align-items: center; line-height: 1.2; font-size: 13px; color: var(--muted); white-space: nowrap; }
 /* Schema version in prod, so the player knows which migration is next. */
 .dbprod { font-size: 12px; font-weight: 800; color: var(--text); }
