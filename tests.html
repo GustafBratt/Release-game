@@ -111,7 +111,7 @@ test('Ihopmergade ändringar går inte att sära på, utom under PI-planeringen'
 });
 
 test('En API-ändring flyttas som en enhet, och behöver plats för alla kort', () => {
-  fresh(8000);
+  fresh(6000);
   spawnApiGroup();
   run(4);
   const cs = [...G.cards.values()].filter((c) => c.type === 'api');
@@ -313,7 +313,7 @@ test('Flera gränser på en gång: allt nytt kommer direkt, men i ordning', () =
   fresh();
   G.seenTips.clear();
   G.seenTips.add('conflict');
-  G.score = 5000; // db, sec and dbOrder at once
+  G.score = 5000; // db, sec and api at once
   G.t = 30;
   update(0.05);
   eq([...G.seenTips].join(','), 'conflict,db', 'först migreringar');
@@ -322,7 +322,7 @@ test('Flera gränser på en gång: allt nytt kommer direkt, men i ordning', () =
   assert(G.seenTips.has('sec'), 'sen säkerhetsfixar, direkt efter');
   finishIntro(); G.paused = true;
   update(0.05);
-  assert(G.seenTips.has('dbOrder'), 'sen fel ordning, direkt efter');
+  assert(G.seenTips.has('api'), 'sen API-ändringar, direkt efter');
 });
 
 test('Infokorten kommer i stjärnordning (simulerade spel)', () => {
