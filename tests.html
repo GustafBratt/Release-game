@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Release Tycoon – tester</title>
+  <style>
+    :root { --bg: #0b1020; --panel: #141b33; --text: #e5e7eb; --muted: #94a3b8; --good: #34d399; --bad: #f43f5e; --warn: #fbbf24; }
+    body { margin: 0; padding: 16px; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    #sum { margin: 0 0 12px; color: var(--muted); }
+    #sum.pass { color: var(--good); font-weight: 700; }
+    #sum.fail { color: var(--bad); font-weight: 700; }
+    ol { padding-left: 22px; margin: 0; }
+    li { margin: 4px 0; }
+    li.pass::marker { color: var(--good); }
+    li.fail { color: var(--bad); }
+    li small { display: block; color: var(--muted); white-space: pre-wrap; }
+    li.fail small { color: #ffd0d8; }
+    li.info small { color: var(--warn); }
+    .wrap { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+    .results { flex: 1; min-width: 280px; }
+    iframe { width: 375px; height: 812px; border: 1px solid #263156; border-radius: 12px; background: var(--panel); flex: none; }
+    button { margin-bottom: 12px; padding: 8px 14px; border: 0; border-radius: 8px; background: #60a5fa; color: #04101f; font: inherit; font-weight: 800; }
+  </style>
+</head>
+<body>
+  <h1>Release Tycoon – tester</h1>
+  <p id="sum">Laddar spelet…</p>
+  <button id="again">Kör igen</button>
+  <div class="wrap">
+    <div class="results"><ol id="out"></ol></div>
+    <iframe id="game" src="index.html?test" title="Spelet som testas"></iframe>
+  </div>
+
+<script>
+// Each test runs inside the game's own window (via eval), so it sees the game's functions and `G` directly.
+// The game's random spawns are switched off by fresh(); tests that need randomness (simulations) say so.
+
+const HELPERS = `
+var ALL_TIPS = ['conflict', 'db', 'dbOrder', 'sec', 'api', 'deadline', 'spont', 'apiBig', 'pi'];
+function fresh(score) {
+  start();
+  for (const k of ALL_TIPS) G.seenTips.add(k);
+  G.paused = true;          // the frame loop stays out of the way; tests drive update() themselves
+  G.spawnIn = 1e9;          // no random spawns
+  G.conflictIn = 1e9;       // no spontaneous conflicts
+  G.score = score || 0;
+}
+function R(i) { return G.releases[i]; }
+function run(seconds, step) { step = step || 0.05; for (let t = 0; t < seconds && G.running; t += step) update(step); }
+function assert(cond, msg) { if (!cond) throw new Error(msg || 'assert failed'); }
+function eq(a, b, msg) { if (a !== b) throw new Error((msg ? msg + ': ' : '') + 'expected ' + JSON.stringify(b) + ', got ' + JSON.stringify(a)); }
+function overTitle() { return document.querySelector('#over-title').textContent; }
+// A bot that plays a whole game at a given action rate; info cards and PI planning are clicked through.
+function botGame(rate, maxSeconds) {
+  start(); G.paused = true;
+  const tips = [];
+  let steps = 0;
+  while (G.running && steps < maxSeconds * 20) {
+    if (tipOpen) { tips.push([pages[0].dataset.key, G.t]); finishIntro(); G.paused = true; continue; }
+    if (G.pi) { if (G.pi.phase === 'hunt') { G.pi.caught = 4; endHunt(); } if (tipOpen) continue; endPI(); }
+    if (Math.random() < rate) {
+      const c = [...G.cards.values()].filter((c) => c.where === 'inbox' && c.progress > 0.15).sort((a, b) => b.progress - a.progress)[0];
+      if (c) for (const r of G.releases) { if (canPlace(c, r).ok) { tryPlace(c.id, r); break; } }
+      const r0 = G.releases[0];
+      for (const k of r0.conflicts) k.progress = CONFLICT_TAPS;
+      if (r0.state === 'open' && r0.cards.length && !pipelineBusy() && !missingMigrations(r0).length && !incompleteApi(r0).length
+        && (r0.cards.length >= 3 || r0.cards.some((id) => G.cards.get(id).dueLeft !== null))) startDeploy(r0);
+    }
+    update(0.05); steps++;
+  }
+  return { t: G.t, score: G.score, tips };
+}
+`;
+
+const tests = [];
+function test(name, fn) { tests.push({ name, fn }); }
+
+// ---------- Planning rules ----------
+
+test('Migreringar planeras i nummerordning från vänster till höger', () => {
+  fresh(6000);
+  const a = spawnCard('db', { dbv: 41 }), b = spawnCard('db', { dbv: 42 });
+  G.nextDbv = 43;
+  assert(tryPlace(b.id, R(0)), 'V42 ska gå att lägga i första releasen');
+  eq(canPlace(a, R(1)).ok, false, 'V41 efter V42');
+  eq(canPlace(a, R(0)).ok, true, 'V41 i samma release som V42');
+});
+
+test('En databasändring tar 2 platser, och en release har 4', () => {
+  fresh(6000);
+  const a = spawnCard('db', { dbv: 41 }), b = spawnCard('db', { dbv: 42 }), c = spawnCard('bug');
+  G.nextDbv = 43;
+  tryPlace(a.id, R(0)); tryPlace(b.id, R(0));
+  eq(usedSlots(R(0)), 4);
+  eq(canPlace(c, R(0)).ok, false, 'den femte platsen');
+});
+
+test('Ihopmergade ändringar går inte att sära på, utom under PI-planeringen', () => {
+  fresh();
+  const a = spawnCard('bug', { module: 'auth' }), b = spawnCard('bug', { module: 'kassa' });
+  tryPlace(a.id, R(0));
+  eq(isLocked(a), false, 'ensam i releasen');
+  tryPlace(b.id, R(0));
+  eq(isLocked(a), true, 'ihop med en annan');
+  eq(canPlace(a, R(1)).ok, false, 'flytta en ihopmergad');
+  G.pi = { phase: 'plan' };
+  eq(isLocked(a), false, 'under PI-planeringen');
+  G.pi = null;
+});
+
+test('En API-ändring flyttas som en enhet, och behöver plats för alla kort', () => {
+  fresh(8000);
+  spawnApiGroup();
+  run(4);
+  const cs = [...G.cards.values()].filter((c) => c.type === 'api');
+  eq(cs.length, 2, 'server och klient');
+  tryPlace(cs[0].id, R(0)); tryPlace(cs[1].id, R(0));
+  assert(tryPlace(cs[0].id, R(1)), 'flytta servern');
+  eq(cs[1].releaseId, R(1).id, 'klienten följer med');
+  for (const m of ['auth', 'kassa', 'sok']) tryPlace(spawnCard('bug', { module: m }).id, R(2));
+  eq(canPlace(cs[0], R(2)).ok, false, 'bara en plats kvar för två kort');
+});
+
+test('Två ändringar i samma tjänst ger en konflikt som spärrar Släpp', () => {
+  fresh();
+  const a = spawnCard('bug', { module: 'auth' }), b = spawnCard('bug', { module: 'auth' });
+  tryPlace(a.id, R(0)); tryPlace(b.id, R(0));
+  eq(R(0).conflicts.length, 1);
+  shipEarly(0);
+  eq(R(0).state, 'open', 'Släpp med olöst konflikt');
+  for (let i = 0; i < CONFLICT_TAPS; i++) tapConflict(0, 0);
+  shipEarly(0);
+  eq(R(0).state, 'deploying', 'Släpp efter löst konflikt');
+});
+
+test('En release med olöst konflikt som går ut ändå blir rollback', () => {
+  fresh();
+  const a = spawnCard('bug', { module: 'auth' }), b = spawnCard('bug', { module: 'auth' });
+  tryPlace(a.id, R(0)); tryPlace(b.id, R(0));
+  startDeploy(R(0)); // as the boss would
+  run(DEPLOY_TIME + 0.5);
+  eq(G.running, true);
+  eq(a.where, 'inbox'); eq(b.where, 'inbox');
+  eq(G.shipped, 0);
+});
+
+test('Ett kort som når botten följer med i första releasen, oplanerat', () => {
+  fresh();
+  const c = spawnCard('bug');
+  c.progress = 0.999;
+  update(0.05);
+  eq(c.where, 'release');
+  eq(c.releaseId, R(0).id);
+  eq(c.unplanned, true);
+});
+
+// ---------- Releasing ----------
+
+test('Bara releasen längst till vänster kan släppas, och nästa kan köas', () => {
+  fresh();
+  const a = spawnCard('bug', { module: 'auth' }), b = spawnCard('bug', { module: 'kassa' });
+  tryPlace(a.id, R(0)); tryPlace(b.id, R(1));
+  const second = R(1).id;
+  shipEarly(1);
+  eq(R(1).state, 'open', 'släppa den andra först');
+  shipEarly(0);
+  eq(R(0).state, 'deploying');
+  shipEarly(1);
+  eq(R(1).queued, true, 'köa den andra');
+  run(DEPLOY_TIME + 0.5);
+  eq(G.shipped, 1);
+  eq(R(0).id, second, 'den köade är nu först');
+  eq(R(0).state, 'deploying', 'och deployas direkt');
+});
+
+test('Poängen beror på ledtiden', () => {
+  fresh();
+  const a = spawnCard('bug');
+  tryPlace(a.id, R(0)); startDeploy(R(0));
+  run(DEPLOY_TIME + 0.2);
+  eq(G.shipped, 1);
+  assert(G.score >= 180 && G.score <= 190, 'en buggfix ute efter ~4 s ska ge ~187 p, gav ' + G.score);
+});
+
+test('Game over: migrering släppt utan den föregående', () => {
+  fresh(6000);
+  spawnCard('db', { dbv: 41 });
+  const b = spawnCard('db', { dbv: 42 });
+  G.nextDbv = 43;
+  tryPlace(b.id, R(0)); startDeploy(R(0));
+  run(DEPLOY_TIME + 0.5);
+  eq(G.running, false);
+  assert(overTitle().includes('fel ordning'), overTitle());
+});
+
+test('En försenad migrering räknas som saknad innan den syns', () => {
+  fresh(6000);
+  G.pendingDbv.add(41); G.nextDbv = 43;
+  const b = spawnCard('db', { dbv: 42 });
+  tryPlace(b.id, R(0));
+  eq(missingMigrations(R(0)).map((c) => c.dbv).join(','), '41');
+  render();
+  assert(laneEls[0].textContent.includes('V41 saknas'), 'varningen i releasen');
+});
+
+test('Game over: ofullständig API-ändring', () => {
+  fresh(8000);
+  spawnApiGroup();
+  const server = [...G.cards.values()].find((c) => c.type === 'api');
+  tryPlace(server.id, R(0)); startDeploy(R(0));
+  run(DEPLOY_TIME + 0.5);
+  eq(G.running, false);
+  assert(overTitle().includes('Ofullständig'), overTitle());
+});
+
+test('Game over: missad deadline', () => {
+  fresh(4000);
+  const s = spawnCard('sec');
+  s.dueLeft = 0.1;
+  update(0.2);
+  eq(G.running, false);
+  assert(overTitle().includes('Säkerhetshålet'), overTitle());
+});
+
+// ---------- The radar ----------
+
+test('Korten på radarn ligger aldrig över varandra', () => {
+  fresh();
+  for (let i = 0; i < 6; i++) spawnCard('bug');
+  G.t = 400; // later cards fall faster and catch up
+  for (let i = 0; i < 12; i++) spawnCard('bug');
+  let worst = Infinity;
+  for (let s = 0; s < 600 && G.running; s++) {
+    update(0.05);
+    const gap = cardGap();
+    const inbox = [...G.cards.values()].filter((c) => c.where === 'inbox');
+    for (const a of inbox) for (const b of inbox) {
+      if (a.id < b.id && a.col === b.col) worst = Math.min(worst, Math.abs(a.progress - b.progress) / gap);
+    }
+  }
+  assert(worst >= 0.999, 'två kort i samma kolumn för nära: ' + worst.toFixed(3) + ' kort isär');
+});
+
+// ---------- PI planning ----------
+
+test('PI planning: startar efter sprint 3, och inget nytt går ut under den', () => {
+  fresh();
+  const a = spawnCard('bug', { module: 'auth' }), b = spawnCard('bug', { module: 'kassa' });
+  tryPlace(a.id, R(0)); tryPlace(b.id, R(1));
+  startDeploy(R(0));
+  G.t = 134.9; G.sprint = 3;
+  update(0.2);
+  assert(G.pi && G.pi.phase === 'hunt', 'PI planning ska ha startat');
+  shipEarly(1);
+  assert(!R(1).queued, 'gick att köa en release under PI planning');
+  const t0 = G.t;
+  for (let i = 0; i < 120; i++) piUpdate(0.05);
+  eq(G.shipped, 1, 'pågående deploy går klart');
+  eq(G.t, t0, 'klockan står still');
+  eq(R(0).state, 'open', 'ingen ny deploy');
+});
+
+test('PI planning: godis blir ändringar, och allt som var på väg landar', () => {
+  fresh();
+  G.t = 134.9; G.sprint = 3;
+  update(0.2);
+  G.scheduled.push({ at: 99, fn: () => spawnCard('bug', { title: 'Försenad' }) });
+  if (G.pi.phase === 'hunt') { G.pi.caught = 3; endHunt(); }
+  eq([...G.cards.values()].filter((c) => c.type === 'story').length, 3, 'nya ändringar');
+  assert([...G.cards.values()].some((c) => c.title === 'Försenad'), 'det försenade kortet');
+  eq(G.scheduled.length, 0);
+  endPI();
+  eq(G.pi, null);
+});
+
+test('PI-banan går att klara när man hoppar i tid', () => {
+  let finished = 0;
+  for (let n = 0; n < 10; n++) {
+    fresh();
+    G.t = 134.9; G.sprint = 3;
+    update(0.2);
+    let held = 0, steps = 0;
+    while (G.pi.phase === 'hunt' && steps < 3600) {
+      const a = G.pi.av, lv = G.pi.level;
+      const ahead = (d) => lv.plats.some((pl) => pl.kind === 'floor' && a.x + d > pl.x && a.x + d < pl.x + pl.w);
+      if (held > 0 && !--held) piPress(false);
+      if (!held && a.onGround && !ahead(piSpeedAt(a.x / lv.end) * 0.08)) { piPress(true); held = 14; }
+      piUpdate(1 / 60); steps++;
+    }
+    if (!G.pi.fell) finished++;
+  }
+  assert(finished >= 9, 'bara ' + finished + ' av 10 banor klarades');
+});
+
+// ---------- Unlocks and info cards ----------
+
+test('Nya sorters ändringar låses upp vid stjärngränserna', () => {
+  fresh();
+  G.seenTips.clear();
+  eq(nextUnlock(), 'db');
+  eq(unlocked('db'), false);
+  G.score = 2000;
+  eq(unlocked('db'), true);
+  eq(nextUnlock(), 'sec');
+  G.t = 30; G.lastTip = -Infinity;
+  update(0.05);
+  assert([...G.cards.values()].some((c) => c.type === 'db'), 'en migrering direkt vid gränsen');
+});
+
+test('Infokorten kommer i ordning och minst 20 s isär (simulerade spel)', () => {
+  const order = Object.keys(UNLOCK);
+  const notes = [];
+  for (const rate of [0.06, 0.1, 0.14]) {
+    const g = botGame(rate, 540);
+    const tips = g.tips.filter(([k]) => k !== 'conflict');
+    for (let i = 1; i < tips.length; i++) {
+      const gap = tips[i][1] - tips[i - 1][1];
+      assert(gap >= TIP_GAP - 0.01, tips[i - 1][0] + ' → ' + tips[i][0] + ' bara ' + gap.toFixed(1) + ' s isär');
+    }
+    const kinds = tips.map(([k]) => k).filter((k) => k !== 'pi');
+    const idx = kinds.map((k) => order.indexOf(k));
+    assert(idx.every((v, i) => i === 0 || v > idx[i - 1]), 'fel ordning: ' + kinds.join(', '));
+    notes.push(kinds.length + ' kort');
+  }
+  return notes.join(' · ');
+});
+
+// ---------- Misc ----------
+
+test('Heltal visas med tusentalsavgränsare', () => {
+  eq(fmt(1234567), '1 234 567');
+  eq(fmt(999), '999');
+});
+
+test('Balans: hur länge bottar överlever (information, inte krav)', () => {
+  const rows = [];
+  for (const [name, rate] of [['långsam', 0.04], ['medel', 0.08], ['snabb', 0.16]]) {
+    const g = botGame(rate, 900);
+    const m = Math.floor(g.t / 60), s = Math.floor(g.t % 60);
+    rows.push(name + ' ' + m + ':' + String(s).padStart(2, '0') + ', ' + fmt(g.score) + ' p');
+  }
+  return { info: rows.join(' · ') };
+});
+
+// ---------- Runner ----------
+
+const frame = document.getElementById('game');
+const out = document.getElementById('out');
+const sum = document.getElementById('sum');
+
+function runAll() {
+  const w = frame.contentWindow;
+  const savedHi = w.localStorage.getItem('rm-hi');
+  w.eval('soundMode = "off"');
+  out.innerHTML = '';
+  let pass = 0, fail = 0;
+  for (const t of tests) {
+    const li = document.createElement('li');
+    const t0 = performance.now();
+    try {
+      const res = w.eval(HELPERS + '\n(' + t.fn.toString() + ')()');
+      const ms = Math.round(performance.now() - t0);
+      const info = res && typeof res === 'object' ? res.info : res;
+      li.className = res && res.info ? 'info' : 'pass';
+      li.innerHTML = '<b></b><small></small>';
+      li.firstChild.textContent = t.name;
+      li.lastChild.textContent = (info ? info + ' · ' : '') + ms + ' ms';
+      pass++;
+    } catch (e) {
+      li.className = 'fail';
+      li.innerHTML = '<b></b><small></small>';
+      li.firstChild.textContent = t.name;
+      li.lastChild.textContent = e.message;
+      fail++;
+    }
+    out.appendChild(li);
+  }
+  if (savedHi === null) w.localStorage.removeItem('rm-hi'); else w.localStorage.setItem('rm-hi', savedHi);
+  w.eval('if (G) G.paused = true');
+  sum.textContent = fail ? `${fail} av ${tests.length} tester misslyckades` : `Alla ${tests.length} tester gick igenom`;
+  sum.className = fail ? 'fail' : 'pass';
+  window.testResult = { pass, fail };
+}
+
+frame.addEventListener('load', () => setTimeout(runAll, 100));
+document.getElementById('again').addEventListener('click', () => frame.contentWindow.location.reload());
+</script>
+</body>
+</html>

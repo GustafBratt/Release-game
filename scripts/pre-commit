@@ -1,0 +1,10 @@
+#!/bin/sh
+# Bumps the ?v= number on style.css and game.js in index.html whenever either file is committed,
+# so phones fetch the new files instead of keeping cached ones.
+# Install it yourself (git doesn't version hooks): cp scripts/pre-commit .git/hooks/pre-commit
+if git diff --cached --name-only | grep -qE '^(game\.js|style\.css)$'; then
+  v=$(grep -o 'game\.js?v=[0-9]*' index.html | grep -o '[0-9]*$')
+  n=$((${v:-0} + 1))
+  sed -i "s/style\.css?v=[0-9]*/style.css?v=$n/; s/game\.js?v=[0-9]*/game.js?v=$n/" index.html
+  git add index.html
+fi

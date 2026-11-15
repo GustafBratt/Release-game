@@ -54,6 +54,13 @@ const TOP = 22;              // space for the inbox label
 const $ = (s) => document.querySelector(s);
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 // Integers shown to the player get Swedish thousands separators: 12 345 (a non-breaking space).
 const fmt = (n) => Math.round(n).toLocaleString('sv-SE');
 
@@ -256,7 +263,7 @@ const sfx = {
 };
 
 // Background music: lo-fi chords, soft drums and a wandering mallet melody.
-// It speeds up and opens its filter with every sprint, and gets nervous when cards near the bottom or prod is low.
+// It speeds up and opens its filter with every sprint, and gets nervous when cards near the bottom or a deadline is close.
 const music = { step: 0, next: 0, bar: 0 };
 const CHORDS = [
   [220, 261.63, 329.63, 392],      // Am7
@@ -278,7 +285,7 @@ function playStep(s, t, sd) {
   if (s === 0 || s === 3 || s === 8) tone(chord[0] / 2, sd * 2.5, 'sine', 0.1, { at: t, bus, attack: 0.02 });
   // Melody: more notes the further into the game.
   if (s % 2 === 0 && Math.random() < 0.12 + G.sprint * 0.04) mallet(pick(MELODY) * (Math.random() < 0.3 ? 2 : 1), 0.4, 0.035, { at: t, bus });
-  // Tension: a radar ping when cards are near the bottom, a low pulse when prod is in trouble.
+  // Tension: a radar ping when cards are near the bottom, a low pulse when a deadline is close.
   if (G.danger && (s === 0 || s === 8)) bell(1760, 0.4, 0.025, { at: t, bus });
   if (G.urgent && s % 4 === 0) tone(chord[0] / 2, 0.2, 'triangle', 0.06, { at: t, bus });
 }
@@ -372,15 +379,15 @@ function newGame() {
     cards: new Map(), releases: [], pairs: new Map(), scheduled: [],
     nextId: 1, nextRid: 1, nextVersion: 1, nextPair: 0, nextDbv: 41, pendingDbv: new Set(),
     spawnIn: 0.8, conflictIn: 8, sprint: 1,
-    shipped: 0, broken: 0, changes: 0, selected: null, seenTips: new Set(), lastTip: -Infinity,
+    shipped: 0, selected: null, seenTips: new Set(), lastTip: -Infinity,
     dbProd: 40, // schema version in prod: the highest migration shipped (they ship in order)
     dbShown: false, // the top bar shows dbProd from the first migration shipped
     leadSum: 0, leadCount: 0, // lead time from radar to prod, over every change shipped
-    pi: null, // PI planning in progress: { phase: 'hunt' | 'plan', spawned, caught, next, candies }
+    pi: null, // PI planning in progress: { phase: 'hunt' | 'plan', caught, time, H, level, av, fell }
   };
 }
 
-// Sprint 1 is a warm-up: it eases from a calm pace down to the normal curve at 60 s.
+// Sprint 1 is a warm-up: it eases from a calm pace onto the normal curve by the end of the sprint.
 const SPRINT_LEN = 45;       // seconds per sprint
 // New kinds of changes are unlocked by points (stars), each with an info card the first time it shows up.
 // In order; the top bar shows the next one. The score never goes down, so an unlock stays unlocked.
@@ -400,17 +407,15 @@ function introduceNext() {
   else if (key === 'spont') spontaneousConflict();
 }
 function nextUnlock() { return Object.keys(UNLOCK).find((k) => G.score < UNLOCK[k]) || null; }
-// Info cards come at least TIP_GAP seconds apart: a new mechanic shows up for the first time only once that
-// much game time has passed since the last card (and after the card it builds on). Until then it waits.
+// Info cards come at least TIP_GAP seconds apart: a new kind shows up for the first time only once that much
+// game time has passed since the last card, not just before a PI planning, and only after the kinds before it.
 const TIP_GAP = 20;
-const TIP_AFTER = { dbOrder: 'db', apiBig: 'api' };
 function ready(key) {
   if (!unlocked(key)) return false;
   if (G.seenTips.has(key)) return true;
   // New kinds come in the order of UNLOCK.
   const keys = Object.keys(UNLOCK);
   if (keys.slice(0, keys.indexOf(key)).some((k) => k !== 'api4' && !G.seenTips.has(k))) return false;
-  if (TIP_AFTER[key] && !G.seenTips.has(TIP_AFTER[key])) return false;
   // PI planning has its own card and can't be moved, so don't introduce anything just before it either.
   const period = PI_EVERY * SPRINT_LEN;
   const nextPI = (Math.floor(G.t / period) + 1) * period;
@@ -480,7 +485,6 @@ function spawnCard(type, opts = {}) {
   if (type === 'sec') c.dueLeft = SEC_DUE;
   else if (opts.due || ((type === 'bug' || type === 'db') && ready('deadline') && Math.random() < 0.22)) c.dueLeft = Math.round(rand(40, 60));
   G.cards.set(c.id, c);
-  G.changes++;
   createCardEl(c);
   if (type === 'db') tip('db');
   if (type === 'sec') { sfx.alarm(); toast('🔒 Säkerhetsfix inkommen – ut i prod inom 30 s!', 'warn'); tip('sec'); }
@@ -523,7 +527,7 @@ function spawnApiGroup() {
   tip('api');
   if (group.size > 2) tip('apiBig');
   const server = pick(['auth', 'kassa', 'sok']);
-  const clients = Object.keys(MODULES).filter((m) => m !== server).sort(() => Math.random() - 0.5).slice(0, group.size - 1);
+  const clients = shuffle(Object.keys(MODULES).filter((m) => m !== server)).slice(0, group.size - 1);
   const a = spawnCard('api', { pairId: pid, role: 'server', module: server, title });
   group.members.push(a.id);
   let at = 0;
@@ -726,14 +730,6 @@ function removeFromRelease(c) {
   renderLane(r);
 }
 
-function deleteCard(c) {
-  if (G.selected === c.id) select(null);
-  if (drag && drag.id === c.id) cancelDrag();
-  if (c.where === 'release') removeFromRelease(c);
-  removeCardEl(c);
-  G.cards.delete(c.id);
-}
-
 // A change that reaches the bottom doesn't vanish: it tags along in the next release, planned or not.
 // An API card follows the rest of its change if part of it is already in a release.
 function slip(c) {
@@ -783,10 +779,12 @@ function tapConflict(lane, idx) {
 // While the leftmost release deploys, the next one can be queued (like a pre-move in chess):
 // it starts deploying by itself as soon as the pipeline is free.
 function canQueue(r) {
+  if (G.pi) return false; // nothing new goes out during PI planning (a release queued before it still does)
   return r && r.lane === 1 && r.state === 'open' && G.releases[0].state === 'deploying' && r.cards.length > 0;
 }
 
 function shipEarly(lane) {
+  if (G.pi) return; // the button looks disabled during PI planning, but disabled buttons still get pointerdown
   const r = G.releases[lane];
   if (canQueue(r)) {
     r.queued = !r.queued;
@@ -795,7 +793,6 @@ function shipEarly(lane) {
     return;
   }
   // Releases go out in version order: only the leftmost one can be released.
-  if (G.pi) return;
   if (!r || r.lane !== 0 || r.state !== 'open' || !r.cards.length || unresolved(r).length || pipelineBusy()) return;
   startDeploy(r);
 }
@@ -825,7 +822,6 @@ function finishDeploy(r) {
   const broken = unresolved(r).length > 0;
 
   if (broken) {
-    G.broken++;
     // Rollback: everything goes back into the inbox.
     for (const c of cards) {
       c.where = 'inbox'; c.releaseId = null;
@@ -1198,12 +1194,14 @@ function buildLevel(H) {
   const plats = [{ x: -300, w: 300 + PI_SPEED0 * 1.8, y: ground, kind: 'floor' }];
   const candies = [];
   let x = PI_SPEED0 * 1.8;
+  let gapBefore = false; // never two gaps back to back: that would be a double-wide gap
   for (let i = 0; i < PI_CANDIES; i++) {
     const v = piSpeedAt(i / PI_CANDIES); // roughly how fast you'll be running here
     const kind = i === 0 ? 'air' : pick(['gap', 'note', 'high', 'air']);
     const emoji = pick(CANDY);
     if (kind === 'gap') {
-      // A candy in the arc over a gap.
+      // A candy in the arc over a gap, with a stretch of desk first if the last segment ended in a gap.
+      if (gapBefore) { plats.push({ x, w: v * 0.5, y: ground, kind: 'floor' }); x += v * 0.5; }
       const gap = v * rand(0.2, 0.32);
       candies.push({ x: x + gap / 2, y: hi(rand(85, 105)), emoji });
       x += gap;
@@ -1227,7 +1225,8 @@ function buildLevel(H) {
       candies.push({ x: x + w / 2, y: hi(rand(55, 90)), emoji });
       x += w;
     }
-    if (kind !== 'gap' && Math.random() < 0.6) x += v * rand(0.18, 0.28); // a gap to jump
+    gapBefore = kind !== 'gap' && Math.random() < 0.6;
+    if (gapBefore) x += v * rand(0.18, 0.28); // a gap to jump
   }
   plats.push({ x, w: 900, y: ground, kind: 'floor' });
   return { plats, candies, end: x + 200, ground };
@@ -1417,10 +1416,12 @@ function endHunt() {
   piBar();
 }
 
+// Lays a card out where there's room on the frozen radar. If there's none, it keeps its place above the edge
+// (counted by the radar label) and slides in once the sprint starts.
 function placeFree(c) {
   const span = L.inboxH - CARD_H - TOP - 6;
   const gap = (CARD_H + 10) / span; // one card's height plus margin, in progress units
-  for (let p = 0; p <= 0.75; p += gap / 2) {
+  for (let p = 0; p <= 0.9; p += gap / 2) {
     for (const col of [0, 1, 2]) {
       const clash = [...G.cards.values()].some((o) => o !== c && o.where === 'inbox' && o.col === col && Math.abs(o.progress - p) < gap);
       if (!clash) { c.col = col; c.progress = p; positionCard(c); return; }
