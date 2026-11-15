@@ -379,7 +379,7 @@ function newGame() {
     cards: new Map(), releases: [], pairs: new Map(), scheduled: [],
     nextId: 1, nextRid: 1, nextVersion: 1, nextPair: 0, nextDbv: 41, pendingDbv: new Set(),
     spawnIn: 0.8, conflictIn: 8, sprint: 1,
-    shipped: 0, selected: null, seenTips: new Set(), lastTip: -Infinity,
+    shipped: 0, selected: null, seenTips: new Set(),
     dbProd: 40, // schema version in prod: the highest migration shipped (they ship in order)
     dbShown: false, // the top bar shows dbProd from the first migration shipped
     leadSum: 0, leadCount: 0, // lead time from radar to prod, over every change shipped
@@ -394,7 +394,7 @@ const SPRINT_LEN = 45;       // seconds per sprint
 const UNLOCK = { db: 2000, sec: 3500, dbOrder: 5000, api: 7000, deadline: 10000, spont: 13000, apiBig: 17000, api4: 22000 };
 const UNLOCK_ICON = { db: '🗄️', sec: '🔒', dbOrder: '🔢', api: '🔌', deadline: '⏰', spont: '🔀', apiBig: '🔌×3', api4: '🔌×4' };
 function unlocked(key) { return G.score >= UNLOCK[key]; }
-// Passing a threshold brings the new kind right away (as soon as its info card may come), not by chance later.
+// Passing a threshold brings the new kind right away, not by chance later.
 function introduceNext() {
   const key = Object.keys(UNLOCK).find((k) => k !== 'api4' && !G.seenTips.has(k));
   if (!key || !ready(key)) return;
@@ -407,19 +407,13 @@ function introduceNext() {
   else if (key === 'spont') spontaneousConflict();
 }
 function nextUnlock() { return Object.keys(UNLOCK).find((k) => G.score < UNLOCK[k]) || null; }
-// Info cards come at least TIP_GAP seconds apart: a new kind shows up for the first time only once that much
-// game time has passed since the last card, not just before a PI planning, and only after the kinds before it.
-const TIP_GAP = 20;
+// A kind can show up once it's unlocked, but its first appearance waits for the kinds before it in UNLOCK,
+// so they (and their info cards) always come in that order.
 function ready(key) {
   if (!unlocked(key)) return false;
   if (G.seenTips.has(key)) return true;
-  // New kinds come in the order of UNLOCK.
   const keys = Object.keys(UNLOCK);
-  if (keys.slice(0, keys.indexOf(key)).some((k) => k !== 'api4' && !G.seenTips.has(k))) return false;
-  // PI planning has its own card and can't be moved, so don't introduce anything just before it either.
-  const period = PI_EVERY * SPRINT_LEN;
-  const nextPI = (Math.floor(G.t / period) + 1) * period;
-  return G.t - G.lastTip >= TIP_GAP && nextPI - G.t >= TIP_GAP;
+  return !keys.slice(0, keys.indexOf(key)).some((k) => k !== 'api4' && !G.seenTips.has(k));
 }
 const WARMUP = SPRINT_LEN;
 function warm(calm, normal) {
@@ -1669,7 +1663,6 @@ function tip(key) {
 function showNextTip() {
   const key = tipQueue.shift();
   G.seenTips.add(key);
-  G.lastTip = G.t;
   tipOpen = true;
   G.paused = true;
   cancelDrag();

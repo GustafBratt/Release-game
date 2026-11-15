@@ -304,21 +304,33 @@ test('Nya sorters ändringar låses upp vid stjärngränserna', () => {
   G.score = 2000;
   eq(unlocked('db'), true);
   eq(nextUnlock(), 'sec');
-  G.t = 30; G.lastTip = -Infinity;
+  G.t = 30;
   update(0.05);
   assert([...G.cards.values()].some((c) => c.type === 'db'), 'en migrering direkt vid gränsen');
 });
 
-test('Infokorten kommer i ordning och minst 20 s isär (simulerade spel)', () => {
+test('Flera gränser på en gång: allt nytt kommer direkt, men i ordning', () => {
+  fresh();
+  G.seenTips.clear();
+  G.seenTips.add('conflict');
+  G.score = 5000; // db, sec and dbOrder at once
+  G.t = 30;
+  update(0.05);
+  eq([...G.seenTips].join(','), 'conflict,db', 'först migreringar');
+  finishIntro(); G.paused = true;
+  update(0.05);
+  assert(G.seenTips.has('sec'), 'sen säkerhetsfixar, direkt efter');
+  finishIntro(); G.paused = true;
+  update(0.05);
+  assert(G.seenTips.has('dbOrder'), 'sen fel ordning, direkt efter');
+});
+
+test('Infokorten kommer i stjärnordning (simulerade spel)', () => {
   const order = Object.keys(UNLOCK);
   const notes = [];
   for (const rate of [0.06, 0.1, 0.14]) {
     const g = botGame(rate, 540);
     const tips = g.tips.filter(([k]) => k !== 'conflict');
-    for (let i = 1; i < tips.length; i++) {
-      const gap = tips[i][1] - tips[i - 1][1];
-      assert(gap >= TIP_GAP - 0.01, tips[i - 1][0] + ' → ' + tips[i][0] + ' bara ' + gap.toFixed(1) + ' s isär');
-    }
     const kinds = tips.map(([k]) => k).filter((k) => k !== 'pi');
     const idx = kinds.map((k) => order.indexOf(k));
     assert(idx.every((v, i) => i === 0 || v > idx[i - 1]), 'fel ordning: ' + kinds.join(', '));
