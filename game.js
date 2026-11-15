@@ -661,7 +661,11 @@ function canPlace(c, r) {
   // An API change is never split: members already in another release move along.
   const along = groupOf(c).filter((m) => m.where === 'release' && m.releaseId !== r.id);
   const need = TYPES[c.type].size + along.length;
-  if (usedSlots(r) + need > CAPACITY) {
+  // The change a release is waiting for (a migration it's missing, the rest of its API change) may always go in,
+  // even if that overfills it: otherwise a merged release could be stuck, unable either to ship or to change.
+  const awaited = (c.type === 'db' && missingMigrations(r).includes(c))
+    || (c.pairId !== null && r.cards.some((id) => G.cards.get(id).pairId === c.pairId));
+  if (!awaited && usedSlots(r) + need > CAPACITY) {
     return { ok: false, reason: along.length ? `Ingen plats för alla ${along.length + 1} API-korten` : 'Releasen är full' };
   }
   if (c.type === 'db') {

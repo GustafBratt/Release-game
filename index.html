@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b1020">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Release Tycoon</title>
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
   <div id="game">
@@ -94,6 +94,7 @@
           <p class="sub">Migreringarna dyker inte alltid upp i den ordning de skapades. Ibland kommer <span class="dbv">V62</span> några sekunder före <span class="dbv">V61</span>.</p>
           <ul class="rules icon-rules">
             <li><span>Den som saknas är på väg. Releasen visar ⛔ tills den ligger på plats, även innan den syns på radarn.</span></li>
+            <li><span>Den som saknas får <b>alltid</b> plats i releasen som väntar på den, även om releasen blir överfull.</span></li>
             <li><span>Släpp inte V62 förrän V61 är med eller redan i prod. Annars: <b>game over</b>.</span></li>
           </ul>
           <p class="note">Ser du ett hopp i numreringen: vänta in den som saknas.</p>
@@ -126,7 +127,7 @@
           <p class="note"><span class="pair">A×2</span> betyder: API-ändring <b>A</b>, som består av <b>2 kort</b>. Kort med samma bokstav hör ihop.</p>
           <ul class="rules icon-rules">
             <li><span>De <b>går inte att dela</b>. Flyttar du ett kort följer det andra med, så det måste finnas plats för båda.</span></li>
-            <li><span>Klienten dyker upp några sekunder efter servern. Tills den ligger i samma release varnar releasen med ⛔ och en röd Släpp-knapp.</span></li>
+            <li><span>Klienten dyker upp några sekunder efter servern. Tills den ligger i samma release varnar releasen med ⛔ och en röd Släpp-knapp. Den får alltid plats där, även om releasen blir överfull.</span></li>
             <li><span>Släpper du en ofullständig API-ändring går klienterna sönder: <b>game over</b>.</span></li>
             <li><span>120 p per kort, och +100 p när hela ändringen var planerad.</span></li>
           </ul>
@@ -214,6 +215,6 @@
       </div>
     </div>
   </div>
-  <script src="game.js?v=7"></script>
+  <script src="game.js?v=8"></script>
 </body>
 </html>

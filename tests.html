@@ -156,6 +156,34 @@ test('Ett kort som når botten följer med i första releasen, oplanerat', () =>
   eq(c.unplanned, true);
 });
 
+test('Migreringen som en release väntar på får plats även om releasen är full', () => {
+  fresh(8000);
+  G.pendingDbv.add(45); G.nextDbv = 47;
+  const story = spawnCard('story', { module: 'app' }), v46 = spawnCard('db', { dbv: 46, module: 'sok' });
+  tryPlace(story.id, R(0)); tryPlace(v46.id, R(0));
+  eq(isLocked(v46), true, 'V46 är ihopmergad');
+  const v45 = spawnCard('db', { dbv: 45, module: 'kassa' });
+  assert(tryPlace(v45.id, R(0)), 'V45 ska få plats i releasen som väntar på den');
+  eq(usedSlots(R(0)), 5, 'överfull');
+  eq(missingMigrations(R(0)).length, 0, 'inget saknas längre');
+  const bug = spawnCard('bug', { module: 'auth' });
+  eq(canPlace(bug, R(0)).ok, false, 'en vanlig ändring får fortfarande inte plats');
+});
+
+test('Resten av en API-ändring får plats i sin release även om den är full', () => {
+  fresh(8000);
+  spawnApiGroup();
+  const server = [...G.cards.values()].find((c) => c.type === 'api');
+  tryPlace(server.id, R(0));
+  for (const m of ['auth', 'kassa', 'sok', 'app'].filter((m) => m !== server.module).slice(0, 3)) tryPlace(spawnCard('bug', { module: m }).id, R(0));
+  eq(usedSlots(R(0)), 4);
+  run(4);
+  const client = [...G.cards.values()].find((c) => c.type === 'api' && c.role === 'klient');
+  assert(client && client.where === 'inbox', 'klienten ska ha dykt upp');
+  assert(tryPlace(client.id, R(0)), 'klienten ska få plats hos sin server');
+  eq(incompleteApi(R(0)).length, 0);
+});
+
 // ---------- Releasing ----------
 
 test('Bara releasen längst till vänster kan släppas, och nästa kan köas', () => {
