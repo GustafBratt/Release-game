@@ -644,24 +644,12 @@ function blockingMigrations(r) {
   });
 }
 
-// The cards that move together with c. Changes in the same service in one release are merged: moving one moves
-// them all. An API change moves as a whole (its cards already in a release come along), as always. During PI
-// planning everything can be replanned card by card, apart from API changes.
+// The cards that move together with c: changes in the same service in one release are merged, so moving one
+// moves them all. Nothing else moves along: the cards of an API change are moved one by one (and must all be in
+// the release when it ships). During PI planning every card moves on its own.
 function movers(c) {
-  const out = new Set([c]);
-  const queue = [c];
-  const add = (y) => { if (y && !out.has(y)) { out.add(y); queue.push(y); } };
-  while (queue.length) {
-    const x = queue.pop();
-    for (const m of groupOf(x)) if (m.where === 'release') add(m);
-    if (x.where === 'release' && !(G.pi && G.pi.phase === 'plan')) {
-      for (const id of releaseById(x.releaseId).cards) {
-        const y = G.cards.get(id);
-        if (y.module === x.module) add(y);
-      }
-    }
-  }
-  return [...out];
+  if (c.where !== 'release' || (G.pi && G.pi.phase === 'plan')) return [c];
+  return releaseById(c.releaseId).cards.map((id) => G.cards.get(id)).filter((y) => y.module === c.module);
 }
 
 function canPlace(c, r) {

@@ -147,7 +147,7 @@ test('En git-konflikt följer med när korten flyttas', () => {
   eq(R(0).conflicts[0].progress, 1);
 });
 
-test('En API-ändring flyttas som en enhet, och behöver plats för alla kort', () => {
+test('API-korten flyttas ett och ett', () => {
   fresh(6000);
   spawnApiGroup();
   run(4);
@@ -155,9 +155,9 @@ test('En API-ändring flyttas som en enhet, och behöver plats för alla kort', 
   eq(cs.length, 2, 'server och klient');
   tryPlace(cs[0].id, R(0)); tryPlace(cs[1].id, R(0));
   assert(tryPlace(cs[0].id, R(1)), 'flytta servern');
-  eq(cs[1].releaseId, R(1).id, 'klienten följer med');
-  for (const m of ['auth', 'kassa', 'sok']) tryPlace(spawnCard('bug', { module: m }).id, R(2));
-  eq(canPlace(cs[0], R(2)).ok, false, 'bara en plats kvar för två kort');
+  eq(cs[1].releaseId, R(0).id, 'klienten stannar');
+  render();
+  assert(laneEls[0].textContent.includes('saknas') && laneEls[1].textContent.includes('saknas'), 'båda releaserna varnar');
 });
 
 test('Två ändringar i samma tjänst ger en konflikt som spärrar Släpp', () => {
