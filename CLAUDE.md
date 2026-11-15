@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-"Release Manager": a small browser game for mobile, in Swedish, with the stress of air traffic control. Changes (bug fixes, security fixes, database changes, API changes) fall down an inbox, and the player drags or taps them into one of three releases before they hit the bottom. The rules aim to be realistic: nothing disappears, deadlines belong to issues and not to releases, API halves can't be split, and database migrations ship in version order. Plain HTML/CSS/JS with no build step, no dependencies and no tests.
+"Release Tycoon" (formerly "Release Manager"): a small browser game for mobile, in Swedish, with the stress of air traffic control. Changes (bug fixes, security fixes, database changes, API changes) fall down an inbox, and the player drags or taps them into one of three releases before they hit the bottom. The rules aim to be realistic: nothing disappears, deadlines belong to issues and not to releases, API halves can't be split, and database migrations ship in version order. Plain HTML/CSS/JS with no build step, no dependencies and no tests.
 
 ## Publishing
 
