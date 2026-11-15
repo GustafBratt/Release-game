@@ -1041,7 +1041,7 @@ function render() {
   if (inboxLabel.textContent !== label) { inboxLabel.textContent = label; inboxLabel.classList.toggle('queued', hidden > 0); }
   $('#score').textContent = fmt(G.score);
   const nk = nextUnlock();
-  const goal = nk ? `🔓 ${UNLOCK_ICON[nk]} vid ${fmt(UNLOCK[nk])}` : '';
+  const goal = nk ? `🎯 ${UNLOCK_ICON[nk]} vid ${fmt(UNLOCK[nk])}` : '';
   const goalEl = $('#goal');
   if (goalEl.textContent !== goal) goalEl.textContent = goal;
   $('#sprint').textContent = G.pi ? 'PI planning' : `Sprint ${G.sprint}`;
