@@ -391,7 +391,7 @@ function newGame() {
 const SPRINT_LEN = 45;       // seconds per sprint
 // New kinds of changes are unlocked by points (stars), each with an info card the first time it shows up.
 // In order; the top bar shows the next one. The score never goes down, so an unlock stays unlocked.
-const UNLOCK = { db: 2000, sec: 3500, api: 5000, dbOrder: 7000, deadline: 10000, spont: 13000, apiBig: 17000, api4: 22000 };
+const UNLOCK = { db: 1500, sec: 3000, api: 4500, dbOrder: 6500, deadline: 9500, spont: 12500, apiBig: 16500, api4: 21500 };
 const UNLOCK_ICON = { db: '🗄️', sec: '🔒', dbOrder: '🔢', api: '🔌', deadline: '⏰', spont: '🔀', apiBig: '🔌×3', api4: '🔌×4' };
 function unlocked(key) { return G.score >= UNLOCK[key]; }
 // Passing a threshold brings the new kind right away, not by chance later.

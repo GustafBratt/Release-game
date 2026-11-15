@@ -364,7 +364,10 @@ test('Nya sorters ändringar låses upp vid stjärngränserna', () => {
   G.seenTips.clear();
   eq(nextUnlock(), 'db');
   eq(unlocked('db'), false);
-  G.score = 2000;
+  eq(UNLOCK.db, 1500);
+  G.score = UNLOCK.db - 1;
+  eq(unlocked('db'), false);
+  G.score = UNLOCK.db;
   eq(unlocked('db'), true);
   eq(nextUnlock(), 'sec');
   G.t = 30;
@@ -376,7 +379,7 @@ test('Flera gränser på en gång: allt nytt kommer direkt, men i ordning', () =
   fresh();
   G.seenTips.clear();
   G.seenTips.add('conflict');
-  G.score = 5000; // db, sec and api at once
+  G.score = UNLOCK.api; // db, sec and api at once
   G.t = 30;
   update(0.05);
   eq([...G.seenTips].join(','), 'conflict,db', 'först migreringar');
