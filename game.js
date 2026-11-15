@@ -537,7 +537,10 @@ function spawnApiGroup() {
   }
 }
 
+// Returns how many cards this brings: an API change brings one per service, and a migration that skips a
+// number brings the held-back one too (both counted through G.scheduled).
 function spawnRandom() {
+  const queued = G.scheduled.length;
   const w = [
     ['bug', 45],
     ['db', ready('db') ? 14 : 0],
@@ -547,9 +550,10 @@ function spawnRandom() {
   let x = Math.random() * w.reduce((s, [, n]) => s + n, 0);
   for (const [type, n] of w) {
     x -= n;
-    if (x < 0) { type === 'api' ? spawnApiGroup() : spawnCard(type); return; }
+    if (x < 0) { type === 'api' ? spawnApiGroup() : spawnCard(type); return 1 + G.scheduled.length - queued; }
   }
   spawnCard('bug');
+  return 1;
 }
 
 // Releases have no date: they go out when the player presses Släpp (or when one gets absurdly overfull).
@@ -1077,7 +1081,8 @@ function update(dt) {
 
   G.spawnIn -= dt;
   introduceNext();
-  if (G.spawnIn <= 0) { spawnRandom(); G.spawnIn = spawnInterval() * rand(0.7, 1.3); }
+  // The pace counts cards, not spawns: after an API change with 3 cards, the next spawn waits three times as long.
+  if (G.spawnIn <= 0) G.spawnIn = spawnInterval() * rand(0.7, 1.3) * spawnRandom();
 
   for (const s of [...G.scheduled]) {
     s.at -= dt;
@@ -1403,6 +1408,7 @@ function endHunt() {
   for (const s of G.scheduled.splice(0)) s.fn();
   for (const c of G.cards.values()) if (c.id >= firstNew && c.where === 'inbox') placeFree(c);
   for (let i = 0; i < p.caught; i++) placeFree(spawnCard('story', { quiet: true }));
+  p.added = G.nextId - firstNew;
   if (p.fell) toast('🕳️ Ramlade ner i ett hål! Banan är slut.', 'warn');
   if (p.caught) { toast(`✨ ${p.caught} ${p.caught === 1 ? 'ny ändring' : 'nya ändringar'}. Planera i lugn och ro.`, 'good'); if (!p.fell) sfx.resolved(); }
   else toast('Inga godisar, inga nya ändringar. Planera det du har.', '');
@@ -1423,7 +1429,11 @@ function placeFree(c) {
   }
 }
 
+// A breather after PI planning: the cards that landed during it count as spawns, so new ones wait a while
+// (at most PI_BREATHER seconds) instead of piling in on top of them.
+const PI_BREATHER = 15;
 function endPI() {
+  if (G.pi.added) G.spawnIn = Math.max(G.spawnIn, Math.min(PI_BREATHER, spawnInterval() * G.pi.added));
   G.pi = null;
   piBar();
   banner(`Sprint ${G.sprint}`, 'Planen är satt. Kör!');
