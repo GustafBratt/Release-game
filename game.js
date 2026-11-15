@@ -262,6 +262,7 @@ function musicTick() {
 const inboxEl = $('#inbox');
 const releasesEl = $('#releases');
 const toastsEl = $('#toasts');
+const inboxLabel = $('.inbox-label');
 const bannerEl = $('#banner');
 const laneEls = [];
 for (let i = 0; i < LANES; i++) {
@@ -339,15 +340,19 @@ function unresolved(r) { return r.conflicts.filter((k) => k.progress < CONFLICT_
 
 // ---------- Spawning ----------
 
-function pickCol() {
-  // Choose the column whose highest card is furthest down, so new cards don't overlap.
+// Cards on the radar never overlap. Each column is a queue: one card's height plus a small gap apart.
+function cardGap() { return (CARD_H + 6) / Math.max(1, L.inboxH - CARD_H - TOP - 6); }
+
+// A card enters at the top of the column with the most room. If every column is full at the top,
+// it waits just above the radar (negative progress) and slides in as soon as there's room.
+function enterInbox(c) {
   const top = Array(LANES).fill(Infinity);
-  for (const c of G.cards.values()) {
-    if (c.where === 'inbox') top[c.col] = Math.min(top[c.col], c.progress);
+  for (const o of G.cards.values()) {
+    if (o !== c && o.where === 'inbox') top[o.col] = Math.min(top[o.col], o.progress);
   }
   const best = Math.max(...top);
-  const cands = top.map((v, i) => (v === best ? i : -1)).filter((i) => i >= 0);
-  return pick(cands);
+  c.col = pick(top.map((v, i) => (v === best ? i : -1)).filter((i) => i >= 0));
+  c.progress = Math.min(0, best - cardGap());
 }
 
 function spawnCard(type, opts = {}) {
@@ -355,12 +360,13 @@ function spawnCard(type, opts = {}) {
     id: G.nextId++, type,
     module: opts.module || pick(type === 'db' ? ['auth', 'kassa', 'sok'] : Object.keys(MODULES)),
     title: opts.title || pick(TITLES[type]),
-    where: 'inbox', releaseId: null, col: pickCol(), progress: 0,
+    where: 'inbox', releaseId: null, col: 0, progress: 0,
     fallTime: type === 'sec' ? fallTime() * 0.55 : fallTime(),
     pairId: opts.pairId ?? null, role: opts.role || null,
     unplanned: false, dueLeft: null, el: null, born: G.t,
     dbv: type === 'db' ? opts.dbv ?? nextMigration() : null, // migrations must ship in this order
   };
+  enterInbox(c);
   if (c.dbv !== null) G.pendingDbv.delete(c.dbv);
   // Deadlines belong to issues, not releases: security fixes always, and sometimes a customer is waiting.
   if (type === 'sec') c.dueLeft = SEC_DUE;
@@ -711,14 +717,12 @@ function finishDeploy(r) {
   if (broken) {
     G.broken++;
     // Rollback: everything goes back into the inbox.
-    // Stagger them across columns and heights so they don't land on top of each other.
-    cards.forEach((c, i) => {
+    for (const c of cards) {
       c.where = 'inbox'; c.releaseId = null;
       c.fallTime = fallTime() * 0.8;
-      c.col = (r.lane + i) % LANES;
-      c.progress = Math.floor(i / LANES) * 0.22;
+      enterInbox(c);
       createCardEl(c);
-    });
+    }
     r.cards = [];
     sfx.rollback();
     toast(`💥 v${r.version}: olöst konflikt, rollback`, 'bad');
@@ -927,6 +931,10 @@ function render() {
     if (el._ship.textContent !== shipText) el._ship.textContent = shipText;
     for (const [p, c] of el._dues) p.textContent = c && c.dueLeft !== null ? Math.ceil(c.dueLeft) + 's' : '';
   }
+  // Cards waiting above a full radar (mostly out of sight) are counted in the radar's label.
+  const hidden = [...G.cards.values()].filter((c) => c.where === 'inbox' && c.progress < -cardGap() / 2).length;
+  const label = hidden ? `Inkommande ändringar · ${fmt(hidden)} till på väg in` : 'Inkommande ändringar';
+  if (inboxLabel.textContent !== label) { inboxLabel.textContent = label; inboxLabel.classList.toggle('queued', hidden > 0); }
   $('#score').textContent = fmt(G.score);
   $('#sprint').textContent = G.pi ? 'PI planning' : `Sprint ${G.sprint}`;
   const dbEl = $('#dbprod');
@@ -976,11 +984,21 @@ function update(dt) {
     if (G.conflictIn <= 0) { G.conflictIn = rand(14, 26); spontaneousConflict(); }
   }
 
-  for (const c of [...G.cards.values()]) {
-    if (c.where === 'inbox') {
-      c.progress += dt / c.fallTime;
-      if (c.progress >= 1) slip(c);
+  // Cards fall in their columns and queue: a faster card stops behind a slower one instead of sliding over it.
+  const gap = cardGap();
+  const cols = Array.from({ length: LANES }, () => []);
+  for (const c of G.cards.values()) if (c.where === 'inbox') cols[c.col].push(c);
+  for (const col of cols) {
+    col.sort((a, b) => b.progress - a.progress);
+    let limit = Infinity;
+    for (const c of col) {
+      c.progress = Math.max(c.progress, Math.min(c.progress + dt / c.fallTime, limit));
+      limit = c.progress - gap;
     }
+  }
+
+  for (const c of [...G.cards.values()]) {
+    if (c.where === 'inbox' && c.progress >= 1) slip(c);
     // Deadlines tick wherever the change is, except once it's on its way out.
     if (c.dueLeft !== null && !(c.where === 'release' && releaseById(c.releaseId)?.state === 'deploying')) {
       c.dueLeft -= dt;
