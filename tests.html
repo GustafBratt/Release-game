@@ -97,17 +97,54 @@ test('En databasändring tar 2 platser, och en release har 4', () => {
   eq(canPlace(c, R(0)).ok, false, 'den femte platsen');
 });
 
-test('Ihopmergade ändringar går inte att sära på, utom under PI-planeringen', () => {
+test('Ändringar i samma tjänst i samma release flyttas tillsammans', () => {
   fresh();
-  const a = spawnCard('bug', { module: 'auth' }), b = spawnCard('bug', { module: 'kassa' });
-  tryPlace(a.id, R(0));
-  eq(isLocked(a), false, 'ensam i releasen');
-  tryPlace(b.id, R(0));
-  eq(isLocked(a), true, 'ihop med en annan');
-  eq(canPlace(a, R(1)).ok, false, 'flytta en ihopmergad');
+  const a = spawnCard('bug', { module: 'sok' }), b = spawnCard('bug', { module: 'sok' }), c = spawnCard('bug', { module: 'auth' });
+  tryPlace(a.id, R(0)); tryPlace(b.id, R(0)); tryPlace(c.id, R(0));
+  assert(tryPlace(a.id, R(1)), 'flytta den ena sök-ändringen');
+  eq(b.releaseId, R(1).id, 'den andra sök-ändringen följer med');
+  eq(c.releaseId, R(0).id, 'auth stannar kvar');
+  assert(tryPlace(c.id, R(2)), 'en ensam tjänst går att flytta för sig');
+});
+
+test('Under PI-planeringen flyttas korten ett och ett', () => {
+  fresh();
+  const a = spawnCard('bug', { module: 'sok' }), b = spawnCard('bug', { module: 'sok' });
+  tryPlace(a.id, R(0)); tryPlace(b.id, R(0));
   G.pi = { phase: 'plan' };
-  eq(isLocked(a), false, 'under PI-planeringen');
+  assert(tryPlace(a.id, R(1)));
+  eq(b.releaseId, R(0).id, 'den andra stannar');
   G.pi = null;
+});
+
+test('Skärmdumpsfallet: V46 ihop med en ändring i samma tjänst går att flytta undan', () => {
+  fresh(8000);
+  G.pendingDbv.add(45); G.nextDbv = 47;
+  const story = spawnCard('story', { module: 'sok' }), v46 = spawnCard('db', { dbv: 46, module: 'sok' });
+  tryPlace(story.id, R(0)); tryPlace(v46.id, R(0));
+  assert(tryPlace(story.id, R(1)), 'flytta båda till nästa release');
+  eq(v46.releaseId, R(1).id, 'V46 följer med');
+  const v45 = spawnCard('db', { dbv: 45, module: 'kassa' });
+  assert(tryPlace(v45.id, R(0)), 'V45 i första releasen');
+  eq(missingMigrations(R(1)).filter((m) => m.where === 'pending').length, 0);
+});
+
+test('En git-konflikt följer med när korten flyttas', () => {
+  fresh();
+  const a = spawnCard('bug', { module: 'auth' }), b = spawnCard('bug', { module: 'auth' });
+  tryPlace(a.id, R(0)); tryPlace(b.id, R(0));
+  tapConflict(0, 0); tapConflict(0, 0);
+  assert(tryPlace(a.id, R(1)));
+  eq(R(0).conflicts.filter((k) => k.progress < CONFLICT_TAPS).length, 0, 'ingen konflikt kvar i den gamla');
+  eq(R(1).conflicts.length, 1, 'konflikten i den nya');
+  eq(R(1).conflicts[0].progress, 2, 'med tryckningarna kvar');
+  const c = spawnCard('bug', { module: 'kassa' });
+  tryPlace(c.id, R(2));
+  R(2).conflicts = [{ module: 'kassa', progress: 1, spont: true }]; // a rebase half done
+  assert(tryPlace(c.id, R(0)));
+  eq(R(0).conflicts.length, 1, 'rebasen följer med');
+  eq(R(0).conflicts[0].spont, true);
+  eq(R(0).conflicts[0].progress, 1);
 });
 
 test('En API-ändring flyttas som en enhet, och behöver plats för alla kort', () => {
@@ -154,34 +191,6 @@ test('Ett kort som når botten följer med i första releasen, oplanerat', () =>
   eq(c.where, 'release');
   eq(c.releaseId, R(0).id);
   eq(c.unplanned, true);
-});
-
-test('Migreringen som en release väntar på får plats även om releasen är full', () => {
-  fresh(8000);
-  G.pendingDbv.add(45); G.nextDbv = 47;
-  const story = spawnCard('story', { module: 'app' }), v46 = spawnCard('db', { dbv: 46, module: 'sok' });
-  tryPlace(story.id, R(0)); tryPlace(v46.id, R(0));
-  eq(isLocked(v46), true, 'V46 är ihopmergad');
-  const v45 = spawnCard('db', { dbv: 45, module: 'kassa' });
-  assert(tryPlace(v45.id, R(0)), 'V45 ska få plats i releasen som väntar på den');
-  eq(usedSlots(R(0)), 5, 'överfull');
-  eq(missingMigrations(R(0)).length, 0, 'inget saknas längre');
-  const bug = spawnCard('bug', { module: 'auth' });
-  eq(canPlace(bug, R(0)).ok, false, 'en vanlig ändring får fortfarande inte plats');
-});
-
-test('Resten av en API-ändring får plats i sin release även om den är full', () => {
-  fresh(8000);
-  spawnApiGroup();
-  const server = [...G.cards.values()].find((c) => c.type === 'api');
-  tryPlace(server.id, R(0));
-  for (const m of ['auth', 'kassa', 'sok', 'app'].filter((m) => m !== server.module).slice(0, 3)) tryPlace(spawnCard('bug', { module: m }).id, R(0));
-  eq(usedSlots(R(0)), 4);
-  run(4);
-  const client = [...G.cards.values()].find((c) => c.type === 'api' && c.role === 'klient');
-  assert(client && client.where === 'inbox', 'klienten ska ha dykt upp');
-  assert(tryPlace(client.id, R(0)), 'klienten ska få plats hos sin server');
-  eq(incompleteApi(R(0)).length, 0);
 });
 
 // ---------- Releasing ----------

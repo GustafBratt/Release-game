@@ -644,43 +644,48 @@ function blockingMigrations(r) {
   });
 }
 
-// Changes planned into the same release are merged together and can't be separated.
-// (An API change alone in a release can still move, since its cards move as one.)
-function isLocked(c) {
-  // PI planning is for replanning: while planning, anything in an open release can be moved.
-  if (c.where !== 'release' || (G.pi && G.pi.phase === 'plan')) return false;
-  const r = releaseById(c.releaseId);
-  const mine = new Set([c.id, ...groupOf(c).map((m) => m.id)]);
-  return !!r && r.cards.some((id) => !mine.has(id));
+// The cards that move together with c. Changes in the same service in one release are merged: moving one moves
+// them all. An API change moves as a whole (its cards already in a release come along), as always. During PI
+// planning everything can be replanned card by card, apart from API changes.
+function movers(c) {
+  const out = new Set([c]);
+  const queue = [c];
+  const add = (y) => { if (y && !out.has(y)) { out.add(y); queue.push(y); } };
+  while (queue.length) {
+    const x = queue.pop();
+    for (const m of groupOf(x)) if (m.where === 'release') add(m);
+    if (x.where === 'release' && !(G.pi && G.pi.phase === 'plan')) {
+      for (const id of releaseById(x.releaseId).cards) {
+        const y = G.cards.get(id);
+        if (y.module === x.module) add(y);
+      }
+    }
+  }
+  return [...out];
 }
 
 function canPlace(c, r) {
   if (!r || r.state !== 'open') return { ok: false, reason: 'Releasen deployas redan' };
   if (c.releaseId === r.id) return { ok: false, same: true };
-  if (isLocked(c)) return { ok: false, reason: `Ihopmergad med andra ändringar i v${releaseById(c.releaseId).version}` };
-  // An API change is never split: members already in another release move along.
-  const along = groupOf(c).filter((m) => m.where === 'release' && m.releaseId !== r.id);
-  const need = TYPES[c.type].size + along.length;
-  // The change a release is waiting for (a migration it's missing, the rest of its API change) may always go in,
-  // even if that overfills it: otherwise a merged release could be stuck, unable either to ship or to change.
-  const awaited = (c.type === 'db' && missingMigrations(r).includes(c))
-    || (c.pairId !== null && r.cards.some((id) => G.cards.get(id).pairId === c.pairId));
-  if (!awaited && usedSlots(r) + need > CAPACITY) {
-    return { ok: false, reason: along.length ? `Ingen plats för alla ${along.length + 1} API-korten` : 'Releasen är full' };
+  const moving = movers(c).filter((m) => m.releaseId !== r.id);
+  const need = moving.reduce((n, m) => n + TYPES[m.type].size, 0);
+  if (usedSlots(r) + need > CAPACITY) {
+    return { ok: false, reason: moving.length > 1 ? `Ingen plats för alla ${moving.length} korten` : 'Releasen är full' };
   }
-  if (c.type === 'db') {
-    // Releases leave left to right, so planned migrations must be in version order left to right.
+  // Releases leave left to right, so planned migrations must be in version order left to right.
+  for (const m of moving) {
+    if (m.type !== 'db') continue;
     for (const o of G.releases) {
       if (o === r) continue;
       for (const id of o.cards) {
         const d = G.cards.get(id);
-        if (d.type !== 'db' || d === c) continue;
-        if (d.dbv < c.dbv && o.lane > r.lane) return { ok: false, reason: `V${d.dbv} går ut senare – V${c.dbv} måste efter` };
-        if (d.dbv > c.dbv && o.lane < r.lane) return { ok: false, reason: `V${d.dbv} går ut tidigare – V${c.dbv} måste före` };
+        if (d.type !== 'db' || moving.includes(d)) continue;
+        if (d.dbv < m.dbv && o.lane > r.lane) return { ok: false, reason: `V${d.dbv} går ut senare – V${m.dbv} måste efter` };
+        if (d.dbv > m.dbv && o.lane < r.lane) return { ok: false, reason: `V${d.dbv} går ut tidigare – V${m.dbv} måste före` };
       }
     }
   }
-  return { ok: true, along };
+  return { ok: true, along: moving.filter((m) => m !== c) };
 }
 
 function tryPlace(id, r) {
@@ -697,14 +702,31 @@ function tryPlace(id, r) {
     return false;
   }
   select(null);
-  placeInto(c, r);
-  for (const m of res.along) placeInto(m, r);
+  const moving = [c, ...res.along];
+  // A git conflict follows its cards, taps and all, so moving can't be used to dodge one (or to restart one).
+  const had = new Set(r.conflicts.map((k) => k.module));
+  const carried = [];
+  for (const m of moving) {
+    if (m.where !== 'release') continue;
+    const k = releaseById(m.releaseId).conflicts.find((x) => x.module === m.module);
+    if (k && !carried.some((x) => x.module === k.module)) carried.push({ ...k });
+  }
+  const quiet = new Set(carried.map((k) => k.module).filter((mod) => !had.has(mod)));
+  for (const m of moving) placeInto(m, r, quiet);
+  for (const k of carried) {
+    if (had.has(k.module)) continue;
+    const t = r.conflicts.find((x) => x.module === k.module);
+    if (t) { t.progress = k.progress; t.spont = k.spont; }
+    else if (k.spont && k.progress < CONFLICT_TAPS) r.conflicts.push(k);
+  }
+  renderLane(r);
   sfx.place();
   return true;
 }
 
 // Moves a card into a release without checking the planning rules (slipped changes ignore them).
-function placeInto(c, r) {
+// `quiet`: modules whose conflict is being carried over from another release (no new-conflict alarm).
+function placeInto(c, r, quiet) {
   if (c.where === 'release') removeFromRelease(c);
   else removeCardEl(c);
   c.where = 'release';
@@ -715,6 +737,7 @@ function placeInto(c, r) {
     const k = r.conflicts.find((x) => x.module === key);
     if (!k) r.conflicts.push({ module: key, progress: 0, spont: false });
     else k.progress = 0;
+    if (quiet && quiet.has(key)) continue;
     sfx.conflict();
     toast(`⚔️ Git-konflikt i ${conflictName(key)} (v${r.version})`, 'bad');
     tip('conflict');
@@ -943,7 +966,9 @@ function slotHTML(c) {
   const pair = pairBadge(c);
   const title = c.type === 'api' ? c.role : c.title;
   const big = T.size > 1;
-  const cls = `slot${big ? ' big' : ''}${c.unplanned ? ' unplanned' : ''}${G.selected === c.id ? ' selected' : ''}`;
+  const sel = G.selected && G.cards.get(G.selected);
+  const moving = sel && sel.where === 'release' && sel.releaseId === c.releaseId && movers(sel).includes(c);
+  const cls = `slot${big ? ' big' : ''}${c.unplanned ? ' unplanned' : ''}${moving ? ' selected' : ''}`;
   return `<div class="${cls}" data-card="${c.id}" style="--mod:${MODULES[c.module].color}">
     <span>${c.unplanned ? '⚠️' : T.icon}${c.dbv !== null ? ` <b class="dbv">V${c.dbv}</b>` : ''}${big ? ' ' + MODULES[c.module].name : ''}</span><span class="st">${title}</span>${pair}${c.dueLeft !== null ? `<span class="due${c.type === 'sec' ? ' sec' : ''}" data-due="${c.id}"></span>` : ''}</div>`;
 }
@@ -1495,12 +1520,6 @@ document.addEventListener('pointerdown', (e) => {
     const c = G.cards.get(+cardEl.dataset.card);
     if (!c) return;
     if (c.where === 'release' && releaseById(c.releaseId)?.state !== 'open') return;
-    if (isLocked(c)) {
-      // Taps on a merged card count as taps on its release (to place a selected card there).
-      if (G.selected && G.selected !== c.id) tryPlace(G.selected, releaseById(c.releaseId));
-      else { sfx.deny(); toast('🔗 Ihopmergad – går inte att sära på', 'bad'); }
-      return;
-    }
     const rect = cardEl.getBoundingClientRect();
     drag = { id: c.id, x0: e.clientX, y0: e.clientY, offX: e.clientX - rect.left, offY: e.clientY - rect.top, w: rect.width, h: rect.height, src: cardEl, ghost: null, moving: false };
     return;

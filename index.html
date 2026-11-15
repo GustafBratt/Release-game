@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0b1020">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Release Tycoon</title>
-  <link rel="stylesheet" href="style.css?v=8">
+  <link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
   <div id="game">
@@ -44,7 +44,7 @@
           <ul class="rules icon-rules">
             <li><span>Ändringar dyker upp på <b>radarn</b> och sjunker mot den röda linjen. <b>Dra</b> en ändring till en release, eller <b>tryck</b> på den och sedan på releasen.</span></li>
             <li><span>Releaser har inget datum. De går ut när du trycker <b>Släpp</b>, i nummerordning: den längst till vänster först. Det finns bara <b>en pipeline</b>, så en release i taget, och en deploy tar 4 s. Medan en deployas kan du köa nästa.</span></li>
-            <li><span>Ändringar i samma release är <b>ihopmergade</b> och går inte att sära på. Tänk efter innan du lägger dem ihop.</span></li>
+            <li><span>Ändringar i <b>samma tjänst</b> (färgen på kortet) i samma release är <b>ihopmergade</b>: flyttar du en följer de andra med.</span></li>
             <li><span><b>Snabbhet ger poäng.</b> Ju kortare tid från radar till prod, desto mer är ändringen värd. En release kan ha max 4 ändringar.</span></li>
             <li><span>Vissa misstag är så allvarliga att det blir <b>game over</b>. Du får veta vilka när de dyker upp.</span></li>
           </ul>
@@ -75,7 +75,7 @@
             <li><span>Tryck på den röda knappen <b>4 gånger</b> för att lösa den. Släpp är spärrat tills den är löst.</span></li>
             <li><span>Går releasen ut ändå (till exempel när chefen deployar) blir det <b>rollback</b>: ändringarna hamnar på radarn igen, och tiden de väntat kostar poäng.</span></li>
           </ul>
-          <p class="note">Ihopmergade ändringar går inte att flytta isär, så konflikten måste lösas. Sprid ut ändringar i samma tjänst från början.</p>
+          <p class="note">Flyttar du ändringarna följer konflikten med, så den måste lösas. Sprid ut ändringar i samma tjänst från början.</p>
         </section>
 
         <section class="page" data-key="db">
@@ -94,7 +94,6 @@
           <p class="sub">Migreringarna dyker inte alltid upp i den ordning de skapades. Ibland kommer <span class="dbv">V62</span> några sekunder före <span class="dbv">V61</span>.</p>
           <ul class="rules icon-rules">
             <li><span>Den som saknas är på väg. Releasen visar ⛔ tills den ligger på plats, även innan den syns på radarn.</span></li>
-            <li><span>Den som saknas får <b>alltid</b> plats i releasen som väntar på den, även om releasen blir överfull.</span></li>
             <li><span>Släpp inte V62 förrän V61 är med eller redan i prod. Annars: <b>game over</b>.</span></li>
           </ul>
           <p class="note">Ser du ett hopp i numreringen: vänta in den som saknas.</p>
@@ -127,7 +126,7 @@
           <p class="note"><span class="pair">A×2</span> betyder: API-ändring <b>A</b>, som består av <b>2 kort</b>. Kort med samma bokstav hör ihop.</p>
           <ul class="rules icon-rules">
             <li><span>De <b>går inte att dela</b>. Flyttar du ett kort följer det andra med, så det måste finnas plats för båda.</span></li>
-            <li><span>Klienten dyker upp några sekunder efter servern. Tills den ligger i samma release varnar releasen med ⛔ och en röd Släpp-knapp. Den får alltid plats där, även om releasen blir överfull.</span></li>
+            <li><span>Klienten dyker upp några sekunder efter servern. Tills den ligger i samma release varnar releasen med ⛔ och en röd Släpp-knapp.</span></li>
             <li><span>Släpper du en ofullständig API-ändring går klienterna sönder: <b>game over</b>.</span></li>
             <li><span>120 p per kort, och +100 p när hela ändringen var planerad.</span></li>
           </ul>
@@ -215,6 +214,6 @@
       </div>
     </div>
   </div>
-  <script src="game.js?v=8"></script>
+  <script src="game.js?v=9"></script>
 </body>
 </html>
