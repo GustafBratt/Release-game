@@ -475,6 +475,7 @@ function nextMigration() {
     G.nextDbv += 2;
     G.pendingDbv.add(held);
     G.scheduled.push({ at: rand(2, 5), fn: () => spawnCard('db', { dbv: held }) });
+    tip('db'); // the first migration may be this one: explain migrations before explaining their order
     tip('dbOrder');
     return held + 1;
   }
